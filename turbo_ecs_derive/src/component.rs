@@ -60,6 +60,8 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
         }
 
         impl turbo_ecs::entities::ComponentQuery for #name {
+            type Arguments = <(#name, ()) as turbo_ecs::entities::ComponentQuery>::Arguments;
+
             #[inline(always)]
             fn get_query() -> turbo_ecs::entities::EntityQuery {
                 <(#name, ()) as turbo_ecs::entities::ComponentQuery>::get_query()

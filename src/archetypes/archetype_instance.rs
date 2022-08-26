@@ -14,7 +14,7 @@ pub struct Archetype {
 	pub(crate) index: usize
 }
 
-pub(crate) struct ArchetypeInstance {
+pub struct ArchetypeInstance {
 	bitfield: BitField,
 	components: BitField,
 	allocator: RangeAllocator,
@@ -26,7 +26,7 @@ impl ArchetypeInstance {
 		Self::with_capacity(components, 0)
 	}
 
-	pub fn with_capacity(components: &[ComponentType], capacity: usize) -> Self {
+	pub(crate) fn with_capacity(components: &[ComponentType], capacity: usize) -> Self {
 		let mut component_bitfield = BitField::new();
 		let bitfield = BitField::with_capacity(capacity);
 		let allocator = RangeAllocator::with_capacity(capacity);
@@ -137,11 +137,11 @@ impl ArchetypeInstance {
 	}
 }
 
-pub(crate) trait IterateArchetype<T> {
+pub trait IterateArchetype<T> {
 	fn for_each(&self, func: &mut impl FnMut(T));
 }
 
-pub(crate) trait IterateArchetypeMut<T> {
+pub trait IterateArchetypeMut<T> {
 	fn for_each_mut(&mut self, func: &mut impl FnMut(T));
 }
 

@@ -65,10 +65,12 @@ impl<I: 'static + ComponentSet, E: 'static + ComponentSet> QueryBuilder<I, E> {
 /// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
 /// It provides a unified way to create an [EntityQuery] from a set of [Component] types through their base type and all derived ref types.
 pub trait ComponentQuery {
+	type Arguments;
 	fn get_query() -> EntityQuery;
 }
 
 impl<I: 'static + ComponentSet, E: 'static + ComponentSet> ComponentQuery for (I, E) {
+	type Arguments = I;
 	fn get_query() -> EntityQuery {
 		let key = TypeId::of::<Self>();
 		let mut ttq = TYPE_TO_QUERY.lock();
