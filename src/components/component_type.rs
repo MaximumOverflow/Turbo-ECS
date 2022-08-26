@@ -2,8 +2,6 @@ use crate::data_structures::{AnyVec, BitField};
 use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
 
-pub use turbo_ecs_derive::Component;
-
 /// A runtime representation of a type implementing the [`Component`] trait.
 #[derive(Clone)]
 pub struct ComponentType {
