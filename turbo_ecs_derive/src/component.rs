@@ -58,6 +58,13 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
                 <(&mut #name, ) as turbo_ecs::components::ComponentSet>::get_bitfield()
             }
         }
+
+        impl turbo_ecs::entities::ComponentQuery for #name {
+            #[inline(always)]
+            fn get_query() -> turbo_ecs::entities::EntityQuery {
+                <(#name, ()) as turbo_ecs::entities::ComponentQuery>::get_query()
+            }
+        }
     };
     gen.into()
 }
