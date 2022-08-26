@@ -3,5 +3,5 @@ Turbo ECS is a high performance Entity-Component-System library for Rust game pr
 
 ## Why Turbo ECS?
 - Unparalleled insertion, deletion and iteration speed
-- Features a streamlined, easy to use API
-- Almost no boilerplate required
+- It features a streamlined, easy to use API
+- Almost no boilerplate is required

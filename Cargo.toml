@@ -13,4 +13,10 @@ nohash-hasher = "0.2.0"
 turbo_ecs_derive = { path = "turbo_ecs_derive" }
 
 [dev-dependencies]
+nalgebra-glm = "0.17.0"
+criterion = "0.3.6"
 rand = "0.8.5"
+
+[[bench]]
+name = "benchmarks"
+harness = false

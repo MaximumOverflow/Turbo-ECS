@@ -137,16 +137,8 @@ impl ArchetypeInstance {
 	}
 }
 
-pub trait IterateArchetype<T> {
-	fn for_each(&self, func: &mut impl FnMut(T));
-}
-
 pub trait IterateArchetypeMut<T> {
 	fn for_each_mut(&mut self, func: &mut impl FnMut(T));
-}
-
-impl IterateArchetype<()> for ArchetypeInstance {
-	fn for_each(&self, _: &mut impl FnMut(())) {}
 }
 
 impl IterateArchetypeMut<()> for ArchetypeInstance {
@@ -157,38 +149,16 @@ macro_rules! impl_archetype_iter {
     ($($t: ident),*) => {
         paste! {
             #[allow(unused_parens)]
-            impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*const $t::ComponentType>),*> IterateArchetype<($($t),*)> for ArchetypeInstance {
-                fn for_each(&self, func: &mut impl FnMut(($($t),*))) {
-                    unsafe {
-                        $(
-                            let [<$t:lower>] = self.buffers.get(&<$t>::component_id()).unwrap().borrow();
-                            let [<$t:lower>] = [<$t:lower>].get_vec_unchecked::<$t::ComponentType>();
-                        )*
-                        for range in self.allocator.used_ranges() {
-                            for i in range {
-                                $(
-                                    let [<$t:lower>] = [<$t:lower>].get_unchecked(i);
-                                )*
-                                func(($($t::convert([<$t:lower>])),*));
-                            }
-                        }
-                    }
-                }
-            }
-
-            #[allow(unused_parens)]
             impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterateArchetypeMut<($($t),*)> for ArchetypeInstance {
                 fn for_each_mut(&mut self, func: &mut impl FnMut(($($t),*))) {
                     unsafe {
                         $(
                             let mut [<$t:lower>] = self.buffers.get(&<$t>::component_id()).unwrap().borrow_mut();
-                            let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>();
+                            let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>().as_mut_ptr();
                         )*
                         for range in self.allocator.used_ranges() {
                             for i in range {
-                                $(
-                                    let [<$t:lower>] = [<$t:lower>].get_unchecked_mut(i);
-                                )*
+                                $(let [<$t:lower>] = [<$t:lower>].add(i);)*
                                 func(($($t::convert([<$t:lower>])),*));
                             }
                         }
