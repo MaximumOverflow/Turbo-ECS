@@ -57,7 +57,7 @@ impl<I: 'static + ComponentSet, E: 'static + ComponentSet> QueryBuilder<I, E> {
 	}
 
 	/// Construct a query from the previously specified types.
-	pub fn get_query(self) -> EntityQuery {
+	pub fn create(self) -> EntityQuery {
 		<(I, E)>::get_query()
 	}
 }
