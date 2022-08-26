@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 type Range = std::ops::Range<usize>;
 
+/// A simple memory management utility.
 #[derive(Default)]
 pub struct RangeAllocator {
 	used: usize,
@@ -11,10 +12,15 @@ pub struct RangeAllocator {
 }
 
 impl RangeAllocator {
+	/// Create a new [RangeAllocator]
 	pub fn new() -> Self {
 		Self::default()
 	}
 
+	/// Create a new [RangeAllocator] with the specified capacity.
+	///
+	/// # Arguments
+	/// * `capacity` - A usize representing the container's target capacity
 	pub fn with_capacity(capacity: usize) -> Self {
 		if capacity == 0 {
 			Self::default()
@@ -27,6 +33,10 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Allocate a continuous chunk of size \[size].
+	///
+	/// # Arguments
+	/// * `size` - The size of the chunk to allocate
 	pub fn allocate(&mut self, size: usize) -> Range {
 		match self.try_allocate(size) {
 			Ok(range) => range,
@@ -34,6 +44,11 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Conditionally allocate a continuous chunk of size \[size].
+	/// The function returns None if there are no available chunks to allocate into.
+	///
+	/// # Arguments
+	/// * `size` - The size of the chunk to allocate
 	pub fn try_allocate(&mut self, size: usize) -> Result<Range, usize> {
 		let find =
 			self.ranges.iter().find_map(|(k, r)| if r.len() >= size { Some(k) } else { None });
@@ -57,6 +72,11 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Allocate multiple chunks adding up to a size of \[size].
+	///
+	/// # Arguments
+	/// * `size` - The total amount of space to allocate
+	/// * `ranges` - The allocated ranges will be outputted here
 	pub fn allocate_fragmented(&mut self, size: usize, ranges: &mut Vec<Range>) {
 		let mut remaining = size;
 
@@ -106,6 +126,13 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Conditionally allocate multiple chunks adding up to a size of \[size].
+	/// The function will return the amount of additional space required for a successful allocation
+	/// if there's not enough space available.
+	///
+	/// # Arguments
+	/// * `size` - The total amount of space to allocate
+	/// * `ranges` - The allocated ranges will be outputted here
 	pub fn try_allocate_fragmented(
 		&mut self, size: usize, ranges: &mut Vec<Range>,
 	) -> Result<(), usize> {
@@ -117,6 +144,10 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Return a range to the allocator.
+	///
+	/// # Arguments
+	/// * `range` - The range to be returned to the allocator. Ranges should never be returned twice.
 	//noinspection DuplicatedCode
 	pub fn free(&mut self, range: Range) {
 		if range.is_empty() {
@@ -172,14 +203,19 @@ impl RangeAllocator {
 		self.ranges.insert(range.start, range);
 	}
 
+	/// Get the amount of available space left to the allocator.
 	pub fn available(&self) -> usize {
 		self.capacity - self.used
 	}
 
+	/// Get the total capacity of the allocator.
 	pub fn capacity(&self) -> usize {
 		self.capacity
 	}
 
+	/// Set the minimum capacity of the allocator.
+	/// # Arguments
+	/// * `capacity` - A usize representing the allocator's minimum capacity
 	pub fn ensure_capacity(&mut self, capacity: usize) {
 		if capacity > self.capacity {
 			let count = capacity - self.capacity;
@@ -187,16 +223,21 @@ impl RangeAllocator {
 		}
 	}
 
+	/// Reserve an additional chunk of size \[size].
+	/// # Arguments
+	/// * `size` - The size of the chunk to reserve
 	pub fn reserve(&mut self, size: usize) {
 		let start = self.capacity;
 		self.capacity += size;
 		self.ranges.insert(start, start..self.capacity);
 	}
 
+	/// Iterate over the unallocated chunks
 	pub fn free_ranges(&self) -> Values<usize, Range> {
 		self.ranges.values()
 	}
 
+	/// Iterate over the allocated chunks
 	pub fn used_ranges(&self) -> UsedRangeIterator {
 		UsedRangeIterator::new(self)
 	}
@@ -209,6 +250,7 @@ impl RangeAllocator {
 	}
 }
 
+/// Iterates over the allocated chunks of a [RangeAllocator]
 pub struct UsedRangeIterator<'l> {
 	lst: usize,
 	cap: usize,

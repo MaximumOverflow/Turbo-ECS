@@ -3,6 +3,7 @@ use std::mem::MaybeUninit;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// A simple object pool.
 #[derive(Default)]
 pub struct Pool<T: Default> {
 	values: Rc<RefCell<Vec<T>>>,
@@ -14,6 +15,7 @@ pub struct PoolBorrow<T> {
 }
 
 impl<T: Default> Pool<T> {
+	/// Borrow one element from the pool.
 	pub fn take_one(&mut self) -> PoolBorrow<T> {
 		let value = self.values.deref().borrow_mut().pop().unwrap_or_else(|| T::default());
 		PoolBorrow {
