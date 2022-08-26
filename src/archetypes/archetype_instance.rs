@@ -11,7 +11,7 @@ type Hasher = BuildHasherDefault<NoHashHasher<usize>>;
 
 #[derive(Default, Eq, PartialEq, Copy, Clone)]
 pub struct Archetype {
-	index: u32
+	pub(crate) index: usize
 }
 
 pub(crate) struct ArchetypeInstance {
