@@ -18,12 +18,7 @@ impl ComponentType {
 		}
 	}
 
-	/// Returns the [`ComponentId`] of T.
-	pub fn component_id_of<T: 'static + Copy + Default + Component>() -> ComponentId {
-		ComponentId::of::<T>()
-	}
-
-	pub fn id(&self) -> ComponentId {
+	pub const fn id(&self) -> ComponentId {
 		self.id
 	}
 

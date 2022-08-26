@@ -1,5 +1,6 @@
 use std::collections::btree_map::Values;
 use std::collections::BTreeMap;
+use std::iter::Cloned;
 
 type Range = std::ops::Range<usize>;
 
@@ -233,8 +234,8 @@ impl RangeAllocator {
 	}
 
 	/// Iterate over the unallocated chunks
-	pub fn free_ranges(&self) -> Values<usize, Range> {
-		self.ranges.values()
+	pub fn free_ranges(&self) -> Cloned<Values<usize, Range>> {
+		self.ranges.values().cloned()
 	}
 
 	/// Iterate over the allocated chunks
@@ -262,7 +263,7 @@ impl<'l> UsedRangeIterator<'l> {
 		Self {
 			lst: 0,
 			cap: allocator.capacity,
-			itr: allocator.free_ranges(),
+			itr: allocator.ranges.values(),
 		}
 	}
 }

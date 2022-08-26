@@ -17,8 +17,8 @@ pub struct BitField {
 #[allow(unused)]
 impl BitField {
 	/// Create a new [BitField].
-	pub fn new() -> Self {
-		Self::default()
+	pub const fn new() -> Self {
+		Self { values: Vec::new() }
 	}
 
 	/// Create a new [BitField] with the specified capacity.
@@ -219,7 +219,7 @@ impl BitField {
 	}
 
 	#[inline(always)]
-	fn pos_shift(a: usize) -> (usize, usize) {
+	const fn pos_shift(a: usize) -> (usize, usize) {
 		(a / BITS, a % BITS)
 	}
 }

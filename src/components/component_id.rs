@@ -33,7 +33,7 @@ impl ComponentId {
 		}
 	}
 
-	pub(crate) fn value(&self) -> usize {
+	pub(crate) const fn value(&self) -> usize {
 		self.value
 	}
 }
