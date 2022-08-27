@@ -1,4 +1,6 @@
-use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetypeMut};
+use crate::archetypes::{
+	Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel,
+};
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use crate::components::{Component, ComponentSet};
@@ -196,23 +198,28 @@ impl EntityStore {
 	}
 }
 
-pub struct EntityFilter<'l, I: 'static + ComponentSet, E: 'static + ComponentSet>
-where
-	ArchetypeInstance: IterateArchetypeMut<I>,
-{
+pub struct EntityFilter<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> {
 	entity_store: &'l mut EntityStore,
 	i_phantom: PhantomData<&'l I>,
 	e_phantom: PhantomData<&'l E>,
 }
 
-impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, I, E>
+pub trait EntityFilterForEach<I: 'static + ComponentSet, E: 'static + ComponentSet>
 where
-	ArchetypeInstance: IterateArchetypeMut<I>,
+	ArchetypeInstance: IterateArchetype<I>,
 {
-	pub fn include<TI: 'static + ComponentSet>(self) -> EntityFilter<'l, TI, E>
-	where
-		ArchetypeInstance: IterateArchetypeMut<TI>,
-	{
+	fn for_each(self, func: impl FnMut(<(I, E) as ComponentQuery>::Arguments));
+}
+
+pub trait EntityFilterParallelForEach<I: 'static + ComponentSet, E: 'static + ComponentSet>
+where
+	ArchetypeInstance: IterateArchetypeParallel<I>,
+{
+	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync));
+}
+
+impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, I, E> {
+	pub fn include<TI: 'static + ComponentSet>(self) -> EntityFilter<'l, TI, E> {
 		EntityFilter {
 			entity_store: self.entity_store,
 			i_phantom: PhantomData::default(),
@@ -227,11 +234,30 @@ where
 			e_phantom: PhantomData::default(),
 		}
 	}
+}
 
-	pub fn for_each(self, mut func: impl FnMut(<(I, E) as ComponentQuery>::Arguments)) {
+impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterForEach<I, E>
+	for EntityFilter<'_, I, E>
+where
+	ArchetypeInstance: IterateArchetype<I>,
+{
+	fn for_each(self, mut func: impl FnMut(<(I, E) as ComponentQuery>::Arguments)) {
 		let query = <(I, E)>::get_query();
 		for archetype in self.entity_store.archetype_store.query(query) {
-			archetype.for_each_mut(&mut func)
+			IterateArchetype::for_each_mut(archetype, &mut func);
+		}
+	}
+}
+
+impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterParallelForEach<I, E>
+	for EntityFilter<'_, I, E>
+where
+	ArchetypeInstance: IterateArchetypeParallel<I>,
+{
+	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync)) {
+		let query = <(I, E)>::get_query();
+		for archetype in self.entity_store.archetype_store.query(query) {
+			IterateArchetypeParallel::for_each_mut(archetype, &func);
 		}
 	}
 }

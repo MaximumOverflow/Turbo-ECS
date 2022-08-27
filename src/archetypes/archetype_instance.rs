@@ -1,5 +1,6 @@
 use crate::components::{Component, ComponentFrom, ComponentId, ComponentType, ComponentTypeInfo};
 use crate::data_structures::{AnyVec, BitField, RangeAllocator, UsedRangeIterator};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::hash::BuildHasherDefault;
 use nohash_hasher::NoHashHasher;
 use std::collections::HashMap;
@@ -137,11 +138,15 @@ impl ArchetypeInstance {
 	}
 }
 
-pub trait IterateArchetypeMut<T> {
+pub trait IterateArchetype<T> {
 	fn for_each_mut(&mut self, func: &mut impl FnMut(T));
 }
 
-impl IterateArchetypeMut<()> for ArchetypeInstance {
+pub trait IterateArchetypeParallel<T> {
+	fn for_each_mut(&mut self, func: &(impl Fn(T) + Send + Sync));
+}
+
+impl IterateArchetype<()> for ArchetypeInstance {
 	fn for_each_mut(&mut self, _: &mut impl FnMut(())) {}
 }
 
@@ -149,7 +154,7 @@ macro_rules! impl_archetype_iter {
     ($($t: ident),*) => {
         paste! {
             #[allow(unused_parens)]
-            impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterateArchetypeMut<($($t),*)> for ArchetypeInstance {
+            impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterateArchetype<($($t),*)> for ArchetypeInstance {
                 fn for_each_mut(&mut self, func: &mut impl FnMut(($($t),*))) {
                     unsafe {
                         $(
@@ -165,6 +170,26 @@ macro_rules! impl_archetype_iter {
                     }
                 }
             }
+
+			#[allow(unused_parens)]
+			impl<$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType> + Send + Sync),*> IterateArchetypeParallel<($($t),*)> for ArchetypeInstance
+			{
+				fn for_each_mut(&mut self, func: &(impl Fn(($($t),*)) + Sync + Send)) {
+					unsafe {
+						$(
+                            let mut [<$t:lower>] = self.buffers.get(&<$t>::component_id()).unwrap().borrow_mut();
+                            let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>().as_mut_ptr() as usize;
+                        )*
+
+						let ranges: Vec<_> = self.allocator.used_ranges().collect();
+						ranges.into_par_iter().flatten().for_each(|i| {
+							$(let [<$t:lower>] = ([<$t:lower>] as *mut $t::ComponentType).add(i);)*
+							func(($($t::convert([<$t:lower>])),*));
+						});
+					}
+				}
+			}
+
         }
     };
 }
