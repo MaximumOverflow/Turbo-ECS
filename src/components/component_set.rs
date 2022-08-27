@@ -13,49 +13,59 @@ type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 lazy_static! {
 	static ref EMPTY_BITFIELD: Arc<BitField> = Arc::new(BitField::new());
-	static ref TYPE_TO_BITFIELD: Mutex<HashMap<TypeId, Arc<BitField>, Hasher>> =
-		Mutex::new(HashMap::default());
-	static ref VEC_TO_BITFIELD: Mutex<HashMap<Vec<ComponentId>, Arc<BitField>>> =
-		Mutex::new(HashMap::default());
+	static ref TYPE_TO_BITFIELD: Mutex<HashMap<TypeId, (Arc<BitField>, bool), Hasher>> = Mutex::new(HashMap::default());
+	static ref VEC_TO_BITFIELD: Mutex<HashMap<Vec<ComponentId>, (Arc<BitField>, bool)>> = Mutex::new(HashMap::default());
 }
 
 /// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
 /// It provides a unified way to create a [BitField] from a set of [Component] types through their base type and all derived ref types.
 pub trait ComponentSet {
 	/// Extract a bitfield from a set of [ComponentIds](ComponentId)
-	fn get_bitfield() -> Arc<BitField>;
+	fn get_bitfield() -> (Arc<BitField>, bool);
 }
 
 impl ComponentSet for () {
-	fn get_bitfield() -> Arc<BitField> {
-		EMPTY_BITFIELD.clone()
+	fn get_bitfield() -> (Arc<BitField>, bool) {
+		(EMPTY_BITFIELD.clone(), false)
 	}
+}
+
+fn make_bitfield(components: &[ComponentId]) -> (Arc<BitField>, bool) {
+	let mut bitfield = BitField::new();
+	let mut has_repeats = false;
+
+	for component in components {
+		has_repeats |= bitfield.get(component.value());
+		bitfield.set(component.value(), true);
+	}
+
+	(Arc::new(bitfield), has_repeats)
 }
 
 macro_rules! impl_component_bitfield {
     ($($t: ident $i: tt),*) => {
         #[allow(unused_parens)]
         impl <$($t: 'static + ComponentTypeInfo),*> ComponentSet for ($($t),*,) {
-            fn get_bitfield() -> Arc<BitField> {
+            fn get_bitfield() -> (Arc<BitField>, bool) {
                 let key = TypeId::of::<Self>();
                 let mut ttb = TYPE_TO_BITFIELD.lock();
-                if let Some(bitfield) = ttb.get(&key) {
-                    return bitfield.clone()
+                if let Some((bitfield, repeats)) = ttb.get(&key) {
+                    return (bitfield.clone(), *repeats)
                 }
 
                 let mut components = vec![$(<$t>::component_id()),*];
                 components.sort_by_key(|a| a.value());
 
                 let mut vtb = VEC_TO_BITFIELD.lock();
-                if let Some(bitfield) = vtb.get(&components) {
-                    ttb.insert(key, bitfield.clone());
-                    return bitfield.clone();
+                if let Some((bitfield, repeats)) = vtb.get(&components) {
+                    ttb.insert(key, (bitfield.clone(), *repeats));
+                    return (bitfield.clone(), *repeats);
                 }
 
-                let bitfield = Arc::new(BitField::from(components.as_slice()));
-                vtb.insert(components, bitfield.clone());
-                ttb.insert(key, bitfield.clone());
-                bitfield
+                let (bitfield, repeats) = make_bitfield(components.as_slice());
+                vtb.insert(components, (bitfield.clone(), repeats));
+                ttb.insert(key, (bitfield.clone(), repeats));
+                (bitfield, repeats)
             }
         }
     };

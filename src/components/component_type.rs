@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use crate::data_structures::{AnyVec, BitField};
 use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
@@ -6,6 +7,7 @@ use std::hash::{Hash, Hasher};
 #[derive(Clone)]
 pub struct ComponentType {
 	id: ComponentId,
+	type_id: TypeId,
 	make_vec: fn() -> AnyVec,
 }
 
@@ -14,12 +16,17 @@ impl ComponentType {
 	pub fn of<T: 'static + Copy + Default + Component>() -> Self {
 		Self {
 			id: ComponentId::of::<T>(),
+			type_id: TypeId::of::<T>(),
 			make_vec: AnyVec::new::<T>,
 		}
 	}
 
 	pub const fn id(&self) -> ComponentId {
 		self.id
+	}
+
+	pub const fn type_id(&self) -> TypeId {
+		self.type_id
 	}
 
 	pub fn make_vec(&self) -> AnyVec {

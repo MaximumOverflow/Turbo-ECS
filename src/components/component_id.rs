@@ -5,14 +5,14 @@ use crate::components::Component;
 use nohash_hasher::NoHashHasher;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::any::TypeId;
 
 type Hasher = BuildHasherDefault<NoHashHasher<usize>>;
 type IdMap = HashMap<TypeId, ComponentId, Hasher>;
 
 lazy_static! {
-	static ref COMPONENT_IDS: Mutex<IdMap> = Mutex::new(HashMap::default());
+	static ref COMPONENT_IDS: RwLock<IdMap> = RwLock::new(HashMap::default());
 }
 
 static mut NEXT_ID: AtomicUsize = AtomicUsize::new(1);
@@ -26,10 +26,13 @@ pub struct ComponentId {
 impl ComponentId {
 	/// Get the [ComponentId] of the type `T`
 	pub fn of<T: 'static + Component>() -> ComponentId {
-		let mut ids = COMPONENT_IDS.lock();
+		let ids = COMPONENT_IDS.read();
 		match ids.get(&TypeId::of::<T>()) {
 			Some(id) => *id,
-			None => create_id::<T>(&mut ids),
+			None => {
+				drop(ids);
+				create_id::<T>()
+			},
 		}
 	}
 
@@ -50,11 +53,10 @@ impl From<&[ComponentId]> for BitField {
 }
 
 #[inline(never)]
-fn create_id<T: 'static + Component>(ids: &mut IdMap) -> ComponentId {
+fn create_id<T: 'static + Component>() -> ComponentId {
 	unsafe {
-		let id = ComponentId {
-			value: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-		};
+		let mut ids = COMPONENT_IDS.write();
+		let id = ComponentId { value: NEXT_ID.fetch_add(1, Ordering::Relaxed), };
 		ids.insert(TypeId::of::<T>(), id);
 		id
 	}

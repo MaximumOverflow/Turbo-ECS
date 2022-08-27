@@ -1,14 +1,14 @@
-use crate::components::{Component, ComponentFrom, ComponentId, ComponentType, ComponentTypeInfo};
+use crate::components::{Component, ComponentFrom, ComponentType, ComponentTypeInfo};
 use crate::data_structures::{AnyVec, BitField, RangeAllocator, UsedRangeIterator};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::hash::BuildHasherDefault;
 use nohash_hasher::NoHashHasher;
 use std::collections::HashMap;
-use std::cell::RefCell;
+use std::any::TypeId;
 use std::ops::Range;
 use paste::paste;
 
-type Hasher = BuildHasherDefault<NoHashHasher<usize>>;
+type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 #[derive(Default, Eq, PartialEq, Copy, Clone)]
 pub struct Archetype {
@@ -19,7 +19,7 @@ pub struct ArchetypeInstance {
 	bitfield: BitField,
 	components: BitField,
 	allocator: RangeAllocator,
-	buffers: HashMap<ComponentId, RefCell<AnyVec>, Hasher>,
+	buffers: HashMap<TypeId, AnyVec, Hasher>,
 }
 
 impl ArchetypeInstance {
@@ -41,7 +41,7 @@ impl ArchetypeInstance {
 				vec.ensure_capacity(capacity);
 
 				component_bitfield.set(index, true);
-				Some((t.id(), RefCell::new(vec)))
+				Some((t.type_id(), vec))
 			}
 		}));
 
@@ -65,7 +65,7 @@ impl ArchetypeInstance {
 			Ok(_) => {},
 			Err(needed) => {
 				for buffer in self.buffers.values_mut() {
-					buffer.borrow_mut().ensure_capacity(self.allocator.capacity() + needed);
+					buffer.ensure_capacity(self.allocator.capacity() + needed);
 				}
 
 				self.allocator.allocate_fragmented(count, ranges);
@@ -76,7 +76,7 @@ impl ArchetypeInstance {
 		if clear {
 			for range in ranges.iter() {
 				for buffer in self.buffers.values_mut() {
-					buffer.borrow_mut().clear_values(range.clone());
+					buffer.clear_values(range.clone());
 				}
 			}
 		}
@@ -108,23 +108,23 @@ impl ArchetypeInstance {
 			self.bitfield.ensure_capacity(capacity);
 			self.allocator.ensure_capacity(capacity);
 			for buffer in self.buffers.values_mut() {
-				buffer.borrow_mut().ensure_capacity(capacity);
+				buffer.ensure_capacity(capacity);
 			}
 		}
 	}
 
 	pub fn get_component<T: 'static + Component>(&self, slot: usize) -> Option<&T> {
 		unsafe {
-			let buffer = self.buffers.get(&ComponentId::of::<T>())?;
-			let vec = (*buffer.as_ptr()).get_vec_unchecked::<T>();
+			let buffer = self.buffers.get(&TypeId::of::<T>())?;
+			let vec = buffer.get_vec_unchecked::<T>();
 			Some(vec.get_unchecked(slot))
 		}
 	}
 
 	pub fn get_component_mut<T: 'static + Component>(&mut self, slot: usize) -> Option<&mut T> {
 		unsafe {
-			let buffer = self.buffers.get(&ComponentId::of::<T>())?;
-			let vec = (*buffer.as_ptr()).get_vec_mut_unchecked::<T>();
+			let buffer = self.buffers.get_mut(&TypeId::of::<T>())?;
+			let vec = buffer.get_vec_mut_unchecked::<T>();
 			Some(vec.get_unchecked_mut(slot))
 		}
 	}
@@ -158,7 +158,7 @@ macro_rules! impl_archetype_iter {
                 fn for_each_mut(&mut self, func: &mut impl FnMut(($($t),*))) {
                     unsafe {
                         $(
-                            let mut [<$t:lower>] = self.buffers.get(&<$t>::component_id()).unwrap().borrow_mut();
+                            let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
                             let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>().as_mut_ptr();
                         )*
                         for range in self.allocator.used_ranges() {
@@ -177,7 +177,7 @@ macro_rules! impl_archetype_iter {
 				fn for_each_mut(&mut self, func: &(impl Fn(($($t),*)) + Sync + Send)) {
 					unsafe {
 						$(
-                            let mut [<$t:lower>] = self.buffers.get(&<$t>::component_id()).unwrap().borrow_mut();
+                            let  [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
                             let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>().as_mut_ptr() as usize;
                         )*
 

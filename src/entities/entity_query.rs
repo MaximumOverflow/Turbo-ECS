@@ -5,7 +5,7 @@ use nohash_hasher::NoHashHasher;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::any::TypeId;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -13,11 +13,11 @@ use std::sync::Arc;
 type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 lazy_static! {
-	static ref QUERY_TO_DATA: Mutex<Vec<EntityQueryData>> = Mutex::new(Vec::default());
-	static ref PTR_TO_QUERY: Mutex<HashMap<(usize, usize), EntityQuery>> =
-		Mutex::new(HashMap::default());
-	static ref TYPE_TO_QUERY: Mutex<HashMap<TypeId, EntityQuery, Hasher>> =
-		Mutex::new(HashMap::default());
+	static ref QUERY_TO_DATA: RwLock<Vec<EntityQueryData>> = RwLock::new(Vec::default());
+	static ref PTR_TO_QUERY: RwLock<HashMap<(usize, usize), EntityQuery>> =
+		RwLock::new(HashMap::default());
+	static ref TYPE_TO_QUERY: RwLock<HashMap<TypeId, EntityQuery, Hasher>> =
+		RwLock::new(HashMap::default());
 }
 
 /// A handle to [BitField] based entity filter.
@@ -73,10 +73,13 @@ impl<I: 'static + ComponentSet, E: 'static + ComponentSet> ComponentQuery for (I
 	type Arguments = I;
 	fn get_query() -> EntityQuery {
 		let key = TypeId::of::<Self>();
-		let mut ttq = TYPE_TO_QUERY.lock();
+		let ttq = TYPE_TO_QUERY.read();
 		match ttq.get(&key) {
 			Some(query) => *query,
-			None => create_query::<I, E>(key, &mut ttq),
+			None => {
+				drop(ttq);
+				create_query::<I, E>(key)
+			},
 		}
 	}
 }
@@ -97,17 +100,24 @@ impl EntityQueryData {
 }
 
 pub(crate) fn get_query_data(query: EntityQuery) -> EntityQueryData {
-	let vec = QUERY_TO_DATA.lock();
+	let vec = QUERY_TO_DATA.read();
 	vec[query.index].clone()
 }
 
 #[inline(never)]
-fn create_query<I: 'static + ComponentSet, E: 'static + ComponentSet>(
-	key: TypeId, ttq: &mut HashMap<TypeId, EntityQuery, Hasher>,
-) -> EntityQuery {
+fn create_query<I: 'static + ComponentSet, E: 'static + ComponentSet>(key: TypeId) -> EntityQuery {
+	let mut ttq = TYPE_TO_QUERY.write();
+
+	let (include, has_repeats) = I::get_bitfield();
+	let (exclude, _) = E::get_bitfield();
+
+	if has_repeats {
+		panic!("An entity query cannot include a type multiple times")
+	}
+
 	let data = EntityQueryData {
-		include: I::get_bitfield(),
-		exclude: E::get_bitfield(),
+		include,
+		exclude,
 	};
 
 	let ptr = (
@@ -115,12 +125,12 @@ fn create_query<I: 'static + ComponentSet, E: 'static + ComponentSet>(
 		data.exclude.deref() as *const BitField as usize,
 	);
 
-	let mut ptq = PTR_TO_QUERY.lock();
+	let mut ptq = PTR_TO_QUERY.write();
 	if let Some(query) = ptq.get(&ptr) {
 		return *query;
 	}
 
-	let mut qtd = QUERY_TO_DATA.lock();
+	let mut qtd = QUERY_TO_DATA.write();
 	let query = EntityQuery { index: qtd.len() };
 
 	qtd.push(data);

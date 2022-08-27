@@ -40,21 +40,21 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
 
         impl turbo_ecs::components::ComponentSet for #name {
             #[inline(always)]
-            fn get_bitfield() -> std::sync::Arc<turbo_ecs::data_structures::BitField> {
+            fn get_bitfield() -> (std::sync::Arc<turbo_ecs::data_structures::BitField>, bool) {
                 <(#name, ) as turbo_ecs::components::ComponentSet>::get_bitfield()
             }
         }
 
         impl turbo_ecs::components::ComponentSet for &#name {
             #[inline(always)]
-            fn get_bitfield() -> std::sync::Arc<turbo_ecs::data_structures::BitField> {
+            fn get_bitfield() -> (std::sync::Arc<turbo_ecs::data_structures::BitField>, bool) {
                 <(&#name, ) as turbo_ecs::components::ComponentSet>::get_bitfield()
             }
         }
 
         impl turbo_ecs::components::ComponentSet for &mut #name {
             #[inline(always)]
-            fn get_bitfield() -> std::sync::Arc<turbo_ecs::data_structures::BitField> {
+            fn get_bitfield() -> (std::sync::Arc<turbo_ecs::data_structures::BitField>, bool) {
                 <(&mut #name, ) as turbo_ecs::components::ComponentSet>::get_bitfield()
             }
         }
