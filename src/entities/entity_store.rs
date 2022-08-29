@@ -3,6 +3,7 @@ use crate::archetypes::{
 };
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
+use crate::components::component_id::HasComponentId;
 use crate::components::{Component, ComponentSet};
 use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
@@ -164,7 +165,7 @@ impl EntityStore {
 	}
 
 	/// Gets a reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component<T: 'static + Component>(&self, entity: &Entity) -> Option<&T> {
+	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -174,7 +175,7 @@ impl EntityStore {
 	}
 
 	/// Gets a mutable reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component_mut<T: 'static + Component>(&mut self, entity: &Entity) -> Option<&mut T> {
+	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -183,6 +184,7 @@ impl EntityStore {
 		unsafe { Some(&mut *(component as *mut T)) }
 	}
 
+	#[inline(always)]
 	pub fn filter(&mut self) -> EntityFilter<(), ()> {
 		EntityFilter {
 			entity_store: self,
@@ -256,8 +258,9 @@ where
 {
 	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync)) {
 		let query = <(I, E)>::get_query();
-		for archetype in self.entity_store.archetype_store.query(query) {
-			IterateArchetypeParallel::for_each_mut(archetype, &func);
-		}
+
+		self.entity_store.archetype_store.query(query).for_each(|archetype| {
+			IterateArchetypeParallel::for_each_mut(archetype, &func)
+		});
 	}
 }

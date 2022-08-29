@@ -19,7 +19,7 @@ pub struct ArchetypeInstance {
 	bitfield: BitField,
 	components: BitField,
 	allocator: RangeAllocator,
-	buffers: HashMap<TypeId, AnyVec, Hasher>,
+	buffers: HashMap<TypeId, AnyVec, Hasher>
 }
 
 impl ArchetypeInstance {
@@ -67,17 +67,14 @@ impl ArchetypeInstance {
 				for buffer in self.buffers.values_mut() {
 					buffer.ensure_capacity(self.allocator.capacity() + needed);
 				}
-
 				self.allocator.allocate_fragmented(count, ranges);
 				self.bitfield.ensure_capacity(self.allocator.capacity());
 			},
 		};
 
 		if clear {
-			for range in ranges.iter() {
-				for buffer in self.buffers.values_mut() {
-					buffer.clear_values(range.clone());
-				}
+			for buffer in self.buffers.values_mut() {
+				ranges.iter().cloned().for_each(|r| buffer.clear_values(r));
 			}
 		}
 	}
@@ -154,7 +151,8 @@ macro_rules! impl_archetype_iter {
     ($($t: ident),*) => {
         paste! {
             #[allow(unused_parens)]
-            impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterateArchetype<($($t),*)> for ArchetypeInstance {
+            impl <$($t: 'static + ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterateArchetype<($($t),*)> for ArchetypeInstance
+			{
                 fn for_each_mut(&mut self, func: &mut impl FnMut(($($t),*))) {
                     unsafe {
                         $(

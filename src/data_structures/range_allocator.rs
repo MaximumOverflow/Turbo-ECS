@@ -205,11 +205,13 @@ impl RangeAllocator {
 	}
 
 	/// Get the amount of available space left to the allocator.
+	#[inline]
 	pub fn available(&self) -> usize {
 		self.capacity - self.used
 	}
 
 	/// Get the total capacity of the allocator.
+	#[inline]
 	pub fn capacity(&self) -> usize {
 		self.capacity
 	}
@@ -234,11 +236,13 @@ impl RangeAllocator {
 	}
 
 	/// Iterate over the unallocated chunks
+	#[inline]
 	pub fn free_ranges(&self) -> Cloned<Values<usize, Range>> {
 		self.ranges.values().cloned()
 	}
 
 	/// Iterate over the allocated chunks
+	#[inline]
 	pub fn used_ranges(&self) -> UsedRangeIterator {
 		UsedRangeIterator::new(self)
 	}
@@ -259,6 +263,7 @@ pub struct UsedRangeIterator<'l> {
 }
 
 impl<'l> UsedRangeIterator<'l> {
+	#[inline]
 	fn new(allocator: &'l RangeAllocator) -> Self {
 		Self {
 			lst: 0,

@@ -58,12 +58,15 @@ impl Default for EcsContext {
 
 impl Deref for EcsContext {
 	type Target = EntityStore;
+
+	#[inline(always)]
 	fn deref(&self) -> &Self::Target {
 		&self.entity_store
 	}
 }
 
 impl DerefMut for EcsContext {
+	#[inline(always)]
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.entity_store
 	}

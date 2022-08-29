@@ -71,6 +71,7 @@ pub trait ComponentQuery {
 
 impl<I: 'static + ComponentSet, E: 'static + ComponentSet> ComponentQuery for (I, E) {
 	type Arguments = I;
+	#[inline(never)]
 	fn get_query() -> EntityQuery {
 		let key = TypeId::of::<Self>();
 		let ttq = TYPE_TO_QUERY.read();

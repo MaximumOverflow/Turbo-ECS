@@ -1,11 +1,27 @@
+use quote::{format_ident, quote};
 use proc_macro::TokenStream;
 use syn::DeriveInput;
-use quote::quote;
 
 pub fn impl_component(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
+
+    let name_str = name.to_string().to_uppercase();
+    let id_name = format_ident!("__COMPONENT_ID_OF_{}", name_str);
+    let lock_name = format_ident!("__COMPONENT_ID_LOCK_OF_{}", name_str);
+
     let gen = quote! {
+        static mut #id_name: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        static mut #lock_name: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
         impl turbo_ecs::components::Component for #name {}
+
+        impl turbo_ecs::components::component_id::HasComponentId for #name {
+            fn component_id() -> ComponentId {
+                unsafe {
+                    turbo_ecs::components::component_id::get_component_id(&mut #lock_name, &mut #id_name)
+                }
+            }
+        }
 
         impl turbo_ecs::components::ComponentTypeInfo for #name {
             type ComponentType = #name;

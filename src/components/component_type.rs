@@ -1,7 +1,8 @@
-use std::any::TypeId;
+use crate::components::component_id::HasComponentId;
 use crate::data_structures::{AnyVec, BitField};
 use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
+use std::any::TypeId;
 
 /// A runtime representation of a type implementing the [`Component`] trait.
 #[derive(Clone)]
@@ -13,7 +14,7 @@ pub struct ComponentType {
 
 impl ComponentType {
 	/// Returns the [`ComponentType`] of T.
-	pub fn of<T: 'static + Copy + Default + Component>() -> Self {
+	pub fn of<T: 'static + Copy + Default + Component + HasComponentId>() -> Self {
 		Self {
 			id: ComponentId::of::<T>(),
 			type_id: TypeId::of::<T>(),
