@@ -1,7 +1,7 @@
-use turbo_ecs::create_archetype;
-use nalgebra_glm::{Mat4, Vec3};
-use turbo_ecs::prelude::*;
 use criterion::*;
+use nalgebra_glm::{Mat4, Vec3};
+use turbo_ecs::create_archetype;
+use turbo_ecs::prelude::*;
 
 const COUNT: usize = 10000;
 
@@ -27,9 +27,7 @@ fn create_entities(c: &mut Criterion) {
                     create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
                 (ecs, archetype)
             },
-            |(mut ecs, archetype)| {
-                ecs.create_entities_from_archetype(archetype, &mut entities)
-            },
+            |(mut ecs, archetype)| ecs.create_entities_from_archetype(archetype, &mut entities),
             BatchSize::PerIteration,
         );
     });
@@ -41,7 +39,8 @@ fn destroy_entities(c: &mut Criterion) {
             || {
                 let mut ecs = EcsContext::new();
                 let mut entities = vec![Entity::default(); COUNT];
-                let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
+                let archetype =
+                    create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
                 ecs.create_entities_from_archetype(archetype, &mut entities);
                 (ecs, entities)
             },

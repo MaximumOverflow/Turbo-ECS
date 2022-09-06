@@ -9,12 +9,15 @@ use parking_lot::Mutex;
 use std::any::TypeId;
 use std::sync::Arc;
 
+type BFValue = (Arc<BitField>, bool);
+type TBFMap = HashMap<TypeId, BFValue, Hasher>;
+type VBFMap = HashMap<Vec<ComponentId>, BFValue>;
 type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 lazy_static! {
 	static ref EMPTY_BITFIELD: Arc<BitField> = Arc::new(BitField::new());
-	static ref TYPE_TO_BITFIELD: Mutex<HashMap<TypeId, (Arc<BitField>, bool), Hasher>> = Mutex::new(HashMap::default());
-	static ref VEC_TO_BITFIELD: Mutex<HashMap<Vec<ComponentId>, (Arc<BitField>, bool)>> = Mutex::new(HashMap::default());
+	static ref VEC_TO_BITFIELD: Mutex<VBFMap> = Mutex::new(HashMap::default());
+	static ref TYPE_TO_BITFIELD: Mutex<TBFMap> = Mutex::new(HashMap::default());
 }
 
 /// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.

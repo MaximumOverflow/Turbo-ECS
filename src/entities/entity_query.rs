@@ -116,10 +116,7 @@ fn create_query<I: 'static + ComponentSet, E: 'static + ComponentSet>(key: TypeI
 		panic!("An entity query cannot include a type multiple times")
 	}
 
-	let data = EntityQueryData {
-		include,
-		exclude,
-	};
+	let data = EntityQueryData { include, exclude };
 
 	let ptr = (
 		data.include.deref() as *const BitField as usize,

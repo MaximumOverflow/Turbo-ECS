@@ -70,7 +70,9 @@ impl ArchetypeStore {
 		&mut self.vec[index]
 	}
 
-	pub(crate) fn query(&mut self, query: EntityQuery) -> impl Iterator<Item = &mut ArchetypeInstance> {
+	pub(crate) fn query(
+		&mut self, query: EntityQuery,
+	) -> impl Iterator<Item = &mut ArchetypeInstance> {
 		if self.queries.get(&query).is_none() {
 			self.init_query(query);
 		}

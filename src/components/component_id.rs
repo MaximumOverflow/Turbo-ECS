@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::atomic::Ordering::{Acquire, Relaxed};
+use std::sync::atomic::Ordering::Relaxed;
 use crate::data_structures::BitField;
+use std::sync::atomic::AtomicUsize;
 use crate::components::Component;
 use std::hash::Hash;
 
@@ -12,7 +12,10 @@ pub struct ComponentId {
 	value: usize,
 }
 
-pub trait HasComponentId where Self: Component {
+pub trait HasComponentId
+where
+	Self: Component,
+{
 	fn component_id() -> ComponentId;
 }
 
@@ -40,31 +43,11 @@ impl From<&[ComponentId]> for BitField {
 	}
 }
 
-#[inline(always)]
-pub unsafe fn get_component_id(lock: &mut AtomicBool, value: &mut AtomicUsize) -> ComponentId {
-	let index = value.load(Relaxed);
-	if index != 0 {
-		ComponentId { value: index }
-	}
-	else {
-		get_next_id(lock, value)
-	}
-}
-
-#[inline(never)]
-unsafe fn get_next_id(lock: &mut AtomicBool, value: &mut AtomicUsize) -> ComponentId {
-	loop {
-		if lock.compare_exchange(false, true, Acquire, Relaxed).is_ok() {
-			break;
-		}
-	}
-
-	if value.load(Relaxed) != 0 {
-		ComponentId { value: value.load(Ordering::Relaxed) }
-	}
-	else {
-		let next = ComponentId { value: NEXT_ID.fetch_add(1, Relaxed) };
-		value.store(next.value, Relaxed);
-		next
+/// # Safety
+/// To be called from code generated from #[derive([Component])].
+/// Should not be called from user code.
+pub unsafe fn get_next() -> ComponentId {
+	ComponentId {
+		value: NEXT_ID.fetch_add(1, Relaxed),
 	}
 }

@@ -5,6 +5,8 @@ pub mod systems;
 mod archetypes;
 mod context;
 
+pub use lazy_static::lazy_static;
+
 pub mod prelude {
 	pub use crate::systems::*;
 	pub use crate::components::*;

@@ -19,7 +19,7 @@ pub struct ArchetypeInstance {
 	bitfield: BitField,
 	components: BitField,
 	allocator: RangeAllocator,
-	buffers: HashMap<TypeId, AnyVec, Hasher>
+	buffers: HashMap<TypeId, AnyVec, Hasher>,
 }
 
 impl ArchetypeInstance {

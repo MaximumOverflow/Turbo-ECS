@@ -1,16 +1,17 @@
 use crate::archetypes::{
 	Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel,
 };
-use crate::entities::{assert_entity, assert_entity_version, ComponentQuery, Entity, EntityInstanceVec};
+use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use crate::components::component_id::HasComponentId;
 use crate::components::{Component, ComponentSet};
 use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
+use std::iter::repeat_with;
 
 pub struct EntityStore {
 	allocator: RangeAllocator,
-	instances: EntityInstanceVec,
+	instances: Vec<EntityInstance>,
 	pub(crate) archetype_store: ArchetypeStore,
 
 	bitfield: BitField,
@@ -21,7 +22,7 @@ pub struct EntityStore {
 impl EntityStore {
 	pub(crate) fn new() -> Self {
 		Self {
-			instances: EntityInstanceVec::default(),
+			instances: vec![],
 			allocator: RangeAllocator::new(),
 			archetype_store: ArchetypeStore::new(),
 
@@ -50,7 +51,7 @@ impl EntityStore {
 			},
 		};
 
-		let instance = self.instances.get_mut(index);
+		let instance = &mut self.instances[index];
 		let mut slot_ranges = self.range_vec_pool.take_one();
 
 		let archetype_instance = self.archetype_store.get_mut(archetype.index as usize);
@@ -60,12 +61,12 @@ impl EntityStore {
 		}
 		archetype_instance.take_slots(1, &mut slot_ranges);
 
-		*instance.slot = slot_ranges[0].start as u32;
-		*instance.archetype = archetype.index as u32;
+		instance.slot = slot_ranges[0].start as u32;
+		instance.archetype = archetype.index as u16;
 
 		Entity {
 			index: index as u32,
-			version: *instance.version,
+			version: instance.version,
 		}
 	}
 
@@ -74,7 +75,9 @@ impl EntityStore {
 	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
 	/// * `entities` - The slice in which to output the [`entity`](Entity) instances.
 	#[inline(never)]
-	pub fn create_entities_from_archetype(&mut self, archetype: Archetype, entities: &mut [Entity]) {
+	pub fn create_entities_from_archetype(
+		&mut self, archetype: Archetype, entities: &mut [Entity],
+	) {
 		let count = entities.len();
 		let mut slot_ranges = self.range_vec_pool.take_one();
 		let mut instance_ranges = self.range_vec_pool.take_one();
@@ -100,13 +103,16 @@ impl EntityStore {
 		let slot_iter = slot_ranges.iter().flat_map(|i| i.clone());
 		let instance_iter = instance_ranges.iter().flat_map(|i| i.clone());
 
-		let a = archetype.index as u32;
+		let a = archetype.index as u16;
 		for ((i, e), s) in instance_iter.zip(entity_iter).zip(slot_iter) {
+			let instance = &mut self.instances[i];
 			let entity = &mut entities[e];
+
+			instance.archetype = a;
+			instance.slot = s as u32;
+
 			entity.index = i as u32;
-			self.instances.slots[i] = s as u32;
-			self.instances.archetypes[i] = a;
-			entity.version = self.instances.versions[i];
+			entity.version = instance.version;
 		}
 	}
 
@@ -129,19 +135,19 @@ impl EntityStore {
 
 			for entity in entities {
 				let index = entity.index as usize;
-				let instance = self.instances.get_mut(index);
+				let instance = &mut self.instances[index];
 
-				assert_entity_version(entity.version, *instance.version);
+				assert_entity(entity, instance);
 				self.bitfield.set_inlined_unchecked(index, true);
 
-				let archetype = *instance.archetype;
+				let archetype = instance.archetype;
 				if (archetype != last_archetype) & !slots.is_empty() {
 					archetypes.get_mut(last_archetype as usize).return_slots(slots);
 					slots.set_len(0);
 				}
 
 				last_archetype = archetype;
-				slots.push(*instance.slot as usize);
+				slots.push(instance.slot as usize);
 			}
 
 			if !slots.is_empty() {
@@ -150,7 +156,7 @@ impl EntityStore {
 
 			for range in self.bitfield.iter_ranges() {
 				for i in range.clone() {
-					self.instances.versions[i] += 1;
+					self.instances[i].version += 1;
 				}
 				self.allocator.free(range);
 			}
@@ -158,9 +164,11 @@ impl EntityStore {
 	}
 
 	/// Gets a reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
-		let instance = self.instances.get(entity.index as usize);
-		assert_entity(entity, &instance);
+	pub fn get_component<T: 'static + Component + HasComponentId>(
+		&self, entity: &Entity,
+	) -> Option<&T> {
+		let instance = &self.instances[entity.index as usize];
+		assert_entity(entity, instance);
 
 		let archetype = self.archetype_store.get(instance.archetype as usize);
 		let component = archetype.get_component::<T>(instance.slot as usize)?;
@@ -168,9 +176,11 @@ impl EntityStore {
 	}
 
 	/// Gets a mutable reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
-		let instance = self.instances.get(entity.index as usize);
-		assert_entity(entity, &instance);
+	pub fn get_component_mut<T: 'static + Component + HasComponentId>(
+		&mut self, entity: &Entity,
+	) -> Option<&mut T> {
+		let instance = &self.instances[entity.index as usize];
+		assert_entity(entity, instance);
 
 		let archetype = self.archetype_store.get_mut(instance.archetype as usize);
 		let component = archetype.get_component_mut::<T>(instance.slot as usize)?;
@@ -189,7 +199,7 @@ impl EntityStore {
 	fn reserve_entity_space(&mut self, size: usize) {
 		self.allocator.reserve(size);
 		self.bitfield.reserve(size);
-		self.instances.reserve(size);
+		self.instances.extend(repeat_with(Default::default).take(size));
 	}
 }
 
@@ -252,8 +262,9 @@ where
 	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync)) {
 		let query = <(I, E)>::get_query();
 
-		self.entity_store.archetype_store.query(query).for_each(|archetype| {
-			IterateArchetypeParallel::for_each_mut(archetype, &func)
-		});
+		self.entity_store
+			.archetype_store
+			.query(query)
+			.for_each(|archetype| IterateArchetypeParallel::for_each_mut(archetype, &func));
 	}
 }
