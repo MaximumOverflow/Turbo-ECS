@@ -3,7 +3,7 @@ use nalgebra_glm::{Mat4, Vec3};
 use turbo_ecs::prelude::*;
 use criterion::*;
 
-const COUNT: usize = 100000;
+const COUNT: usize = 10000;
 
 #[derive(Default, Copy, Clone, Component)]
 struct Transform(Mat4);
@@ -17,11 +17,9 @@ struct Rotation(Vec3);
 #[derive(Default, Copy, Clone, Component)]
 struct Velocity(Vec3);
 
-fn create_from_archetype(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Create from archetype");
-    group.bench_function("clear: false", |b| {
+fn create_entities(c: &mut Criterion) {
+    c.bench_function("Create entities", |b| {
         let mut entities = vec![Entity::default(); COUNT];
-
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
@@ -30,25 +28,24 @@ fn create_from_archetype(c: &mut Criterion) {
                 (ecs, archetype)
             },
             |(mut ecs, archetype)| {
-                ecs.create_entities_from_archetype(archetype, &mut entities, false)
+                ecs.create_entities_from_archetype(archetype, &mut entities)
             },
             BatchSize::PerIteration,
         );
     });
+}
 
-    group.bench_function("clear: true", |b| {
-        let mut entities = vec![Entity::default(); COUNT];
-
+fn destroy_entities(c: &mut Criterion) {
+    c.bench_function("Destroy entities", |b| {
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
-                let archetype =
-                    create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-                (ecs, archetype)
+                let mut entities = vec![Entity::default(); COUNT];
+                let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
+                ecs.create_entities_from_archetype(archetype, &mut entities);
+                (ecs, entities)
             },
-            |(mut ecs, archetype)| {
-                ecs.create_entities_from_archetype(archetype, &mut entities, true)
-            },
+            |(mut ecs, entities)| ecs.destroy_entities(&entities),
             BatchSize::PerIteration,
         );
     });
@@ -60,7 +57,7 @@ fn iterate_entities(c: &mut Criterion) {
         let mut ecs = EcsContext::new();
         let mut entities = vec![Entity::default(); COUNT];
         let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-        ecs.create_entities_from_archetype(archetype, &mut entities, true);
+        ecs.create_entities_from_archetype(archetype, &mut entities);
 
         b.iter(|| {
             ecs.filter()
@@ -76,7 +73,7 @@ fn iterate_entities(c: &mut Criterion) {
         let mut ecs = EcsContext::new();
         let mut entities = vec![Entity::default(); COUNT];
         let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-        ecs.create_entities_from_archetype(archetype, &mut entities, true);
+        ecs.create_entities_from_archetype(archetype, &mut entities);
 
         b.iter(|| {
             ecs.filter()
@@ -89,5 +86,10 @@ fn iterate_entities(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benchmarks, create_from_archetype, iterate_entities);
+criterion_group!(
+    benchmarks,
+    create_entities,
+    destroy_entities,
+    iterate_entities,
+);
 criterion_main!(benchmarks);

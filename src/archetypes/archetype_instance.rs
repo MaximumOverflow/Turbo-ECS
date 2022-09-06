@@ -58,9 +58,8 @@ impl ArchetypeInstance {
 	///
 	/// # Arguments
 	/// * `count` - The amount of slots to allocate
-	/// * `clear` - Whether to set the allocated component slots to their default values
 	/// * `ranges` - The allocated chunks will be pushed here
-	pub fn take_slots(&mut self, count: usize, clear: bool, ranges: &mut Vec<Range<usize>>) {
+	pub fn take_slots(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
 		match self.allocator.try_allocate_fragmented(count, ranges) {
 			Ok(_) => {},
 			Err(needed) => {
@@ -71,12 +70,6 @@ impl ArchetypeInstance {
 				self.bitfield.ensure_capacity(self.allocator.capacity());
 			},
 		};
-
-		if clear {
-			for buffer in self.buffers.values_mut() {
-				ranges.iter().cloned().for_each(|r| buffer.clear_values(r));
-			}
-		}
 	}
 
 	/// Return a set of slots to the pool.
@@ -92,6 +85,9 @@ impl ArchetypeInstance {
 
 		self.bitfield.set_batch_unchecked::<true>(slots);
 		for range in self.bitfield.iter_ranges() {
+			for buffer in self.buffers.values_mut() {
+				buffer.clear_values(range.clone());
+			}
 			self.allocator.free(range);
 		}
 	}

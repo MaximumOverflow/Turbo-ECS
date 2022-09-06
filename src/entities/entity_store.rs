@@ -1,17 +1,16 @@
 use crate::archetypes::{
 	Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel,
 };
-use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
+use crate::entities::{assert_entity, assert_entity_version, ComponentQuery, Entity, EntityInstanceVec};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use crate::components::component_id::HasComponentId;
 use crate::components::{Component, ComponentSet};
 use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
-use std::iter::repeat_with;
 
 pub struct EntityStore {
 	allocator: RangeAllocator,
-	instances: Vec<EntityInstance>,
+	instances: EntityInstanceVec,
 	pub(crate) archetype_store: ArchetypeStore,
 
 	bitfield: BitField,
@@ -22,7 +21,7 @@ pub struct EntityStore {
 impl EntityStore {
 	pub(crate) fn new() -> Self {
 		Self {
-			instances: vec![],
+			instances: EntityInstanceVec::default(),
 			allocator: RangeAllocator::new(),
 			archetype_store: ArchetypeStore::new(),
 
@@ -34,17 +33,14 @@ impl EntityStore {
 
 	/// Creates a single [`entity`](Entity) with no [`components`](Component) attached.
 	pub fn create_entity(&mut self) -> Entity {
-		self.create_entity_from_archetype(Archetype::default(), false)
+		self.create_entity_from_archetype(Archetype::default())
 	}
 
 	/// Creates a single [`entity`](Entity) belonging to the specified [`archetype`](Archetype).
 	/// # Arguments
 	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
-	/// * `clear_components` - Specifies whether or not the [`entity`](Entity)'s [`components`](Component) should be default initialized upon instantiation.
 	#[inline(never)]
-	pub fn create_entity_from_archetype(
-		&mut self, archetype: Archetype, clear_components: bool,
-	) -> Entity {
+	pub fn create_entity_from_archetype(&mut self, archetype: Archetype) -> Entity {
 		let index = match self.allocator.try_allocate(1) {
 			Ok(index) => index.start,
 			Err(_) => {
@@ -54,7 +50,7 @@ impl EntityStore {
 			},
 		};
 
-		let instance = &mut self.instances[index];
+		let instance = self.instances.get_mut(index);
 		let mut slot_ranges = self.range_vec_pool.take_one();
 
 		let archetype_instance = self.archetype_store.get_mut(archetype.index as usize);
@@ -62,13 +58,14 @@ impl EntityStore {
 		unsafe {
 			slot_ranges.set_len(0);
 		}
-		archetype_instance.take_slots(1, clear_components, &mut slot_ranges);
+		archetype_instance.take_slots(1, &mut slot_ranges);
 
-		instance.slot = slot_ranges[0].start as u32;
-		instance.archetype = archetype.index as u16;
+		*instance.slot = slot_ranges[0].start as u32;
+		*instance.archetype = archetype.index as u32;
+
 		Entity {
 			index: index as u32,
-			version: instance.version,
+			version: *instance.version,
 		}
 	}
 
@@ -76,11 +73,8 @@ impl EntityStore {
 	/// # Arguments
 	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
 	/// * `entities` - The slice in which to output the [`entity`](Entity) instances.
-	/// * `clear_components` - Specifies whether or not an [`entity`](Entity)'s [`components`](Component) should be default initialized upon instantiation.
 	#[inline(never)]
-	pub fn create_entities_from_archetype(
-		&mut self, archetype: Archetype, entities: &mut [Entity], clear_components: bool,
-	) {
+	pub fn create_entities_from_archetype(&mut self, archetype: Archetype, entities: &mut [Entity]) {
 		let count = entities.len();
 		let mut slot_ranges = self.range_vec_pool.take_one();
 		let mut instance_ranges = self.range_vec_pool.take_one();
@@ -99,21 +93,20 @@ impl EntityStore {
 			},
 		}
 
-		let archetype_instance = self.archetype_store.get_mut(archetype.index as usize);
-		archetype_instance.take_slots(count, clear_components, &mut slot_ranges);
+		let archetype_instance = self.archetype_store.get_mut(archetype.index);
+		archetype_instance.take_slots(count, &mut slot_ranges);
 
 		let entity_iter = 0..count;
 		let slot_iter = slot_ranges.iter().flat_map(|i| i.clone());
 		let instance_iter = instance_ranges.iter().flat_map(|i| i.clone());
-		for ((i, e), s) in instance_iter.zip(slot_iter).zip(entity_iter) {
-			let instance = &mut self.instances[i];
+
+		let a = archetype.index as u32;
+		for ((i, e), s) in instance_iter.zip(entity_iter).zip(slot_iter) {
 			let entity = &mut entities[e];
-
-			instance.slot = s as u32;
-			instance.archetype = archetype.index as u16;
-
 			entity.index = i as u32;
-			entity.version = instance.version;
+			self.instances.slots[i] = s as u32;
+			self.instances.archetypes[i] = a;
+			entity.version = self.instances.versions[i];
 		}
 	}
 
@@ -136,19 +129,19 @@ impl EntityStore {
 
 			for entity in entities {
 				let index = entity.index as usize;
-				let instance = &mut self.instances[index];
+				let instance = self.instances.get_mut(index);
 
-				assert_entity(entity, instance);
+				assert_entity_version(entity.version, *instance.version);
 				self.bitfield.set_inlined_unchecked(index, true);
 
-				let archetype = instance.archetype;
+				let archetype = *instance.archetype;
 				if (archetype != last_archetype) & !slots.is_empty() {
 					archetypes.get_mut(last_archetype as usize).return_slots(slots);
 					slots.set_len(0);
 				}
 
 				last_archetype = archetype;
-				slots.push(instance.slot as usize);
+				slots.push(*instance.slot as usize);
 			}
 
 			if !slots.is_empty() {
@@ -157,7 +150,7 @@ impl EntityStore {
 
 			for range in self.bitfield.iter_ranges() {
 				for i in range.clone() {
-					self.instances[i].version += 1;
+					self.instances.versions[i] += 1;
 				}
 				self.allocator.free(range);
 			}
@@ -166,8 +159,8 @@ impl EntityStore {
 
 	/// Gets a reference to a [`components`](Component) bound to a specific [`entity`](Entity).
 	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
-		let instance = &self.instances[entity.index as usize];
-		assert_entity(entity, instance);
+		let instance = self.instances.get(entity.index as usize);
+		assert_entity(entity, &instance);
 
 		let archetype = self.archetype_store.get(instance.archetype as usize);
 		let component = archetype.get_component::<T>(instance.slot as usize)?;
@@ -176,8 +169,8 @@ impl EntityStore {
 
 	/// Gets a mutable reference to a [`components`](Component) bound to a specific [`entity`](Entity).
 	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
-		let instance = &self.instances[entity.index as usize];
-		assert_entity(entity, instance);
+		let instance = self.instances.get(entity.index as usize);
+		assert_entity(entity, &instance);
 
 		let archetype = self.archetype_store.get_mut(instance.archetype as usize);
 		let component = archetype.get_component_mut::<T>(instance.slot as usize)?;
@@ -196,7 +189,7 @@ impl EntityStore {
 	fn reserve_entity_space(&mut self, size: usize) {
 		self.allocator.reserve(size);
 		self.bitfield.reserve(size);
-		self.instances.extend(repeat_with(Default::default).take(size));
+		self.instances.reserve(size);
 	}
 }
 
