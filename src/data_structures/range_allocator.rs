@@ -51,8 +51,7 @@ impl RangeAllocator {
 	/// # Arguments
 	/// * `size` - The size of the chunk to allocate
 	pub fn try_allocate(&mut self, size: usize) -> Result<Range, usize> {
-		let find =
-			self.ranges.iter().find_map(|(k, r)| if r.len() >= size { Some(k) } else { None });
+		let find = self.ranges.iter().find_map(|(k, r)| if r.len() >= size { Some(k) } else { None });
 
 		match find {
 			Some(start) => {
@@ -68,7 +67,7 @@ impl RangeAllocator {
 
 				self.used += size;
 				Ok(used_range)
-			},
+			}
 			None => Err(size - self.available()),
 		}
 	}
@@ -134,9 +133,7 @@ impl RangeAllocator {
 	/// # Arguments
 	/// * `size` - The total amount of space to allocate
 	/// * `ranges` - The allocated ranges will be outputted here
-	pub fn try_allocate_fragmented(
-		&mut self, size: usize, ranges: &mut Vec<Range>,
-	) -> Result<(), usize> {
+	pub fn try_allocate_fragmented(&mut self, size: usize, ranges: &mut Vec<Range>) -> Result<(), usize> {
 		if self.available() < size {
 			Err(size - self.available())
 		} else {
@@ -156,7 +153,7 @@ impl RangeAllocator {
 		}
 		let find_start = self.ranges.get(&range.end);
 		match find_start {
-			None => {},
+			None => {}
 			Some(extend) => {
 				let key = extend.start;
 				let mut extend = extend.clone();
@@ -166,30 +163,26 @@ impl RangeAllocator {
 				self.used -= range.len();
 				self.ranges.remove(&key);
 
-				let find_end =
-					self.ranges
-						.iter()
-						.find_map(|(k, r)| if r.end == extend.start { Some(k) } else { None });
+				let find_end = self.ranges.iter().find_map(|(k, r)| if r.end == extend.start { Some(k) } else { None });
 				match find_end {
 					None => {
 						self.ranges.insert(extend.start, extend.clone());
 						return;
-					},
+					}
 
 					Some(key) => {
 						let key = *key;
 						let range = self.ranges.get_mut(&key).unwrap();
 						range.end = extend.end;
 						return;
-					},
+					}
 				}
-			},
+			}
 		}
 
-		let find_end =
-			self.ranges.iter().find_map(|(k, r)| if r.end == range.start { Some(k) } else { None });
+		let find_end = self.ranges.iter().find_map(|(k, r)| if r.end == range.start { Some(k) } else { None });
 		match find_end {
-			None => {},
+			None => {}
 			Some(key) => {
 				let key = *key;
 				let extend = self.ranges.get_mut(&key).unwrap();
@@ -197,7 +190,7 @@ impl RangeAllocator {
 				self.used -= range.len();
 				extend.end += range.len();
 				return;
-			},
+			}
 		}
 
 		self.used -= range.len();
@@ -208,6 +201,12 @@ impl RangeAllocator {
 	#[inline]
 	pub fn available(&self) -> usize {
 		self.capacity - self.used
+	}
+
+	/// Get the amount of used space in the allocator.
+	#[inline]
+	pub fn used(&self) -> usize {
+		self.used
 	}
 
 	/// Get the total capacity of the allocator.
@@ -282,7 +281,7 @@ impl Iterator for UsedRangeIterator<'_> {
 					let range = self.lst..self.cap;
 					self.lst = self.cap;
 					return Some(range);
-				},
+				}
 
 				None => return None,
 
@@ -295,7 +294,7 @@ impl Iterator for UsedRangeIterator<'_> {
 					} else {
 						continue;
 					}
-				},
+				}
 			}
 		}
 	}

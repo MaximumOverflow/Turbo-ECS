@@ -9,7 +9,7 @@ use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
 use std::iter::repeat_with;
 
-pub struct EntityStore {
+pub struct EntityRegistry {
 	allocator: RangeAllocator,
 	instances: Vec<EntityInstance>,
 	pub(crate) archetype_store: ArchetypeStore,
@@ -19,7 +19,7 @@ pub struct EntityStore {
 	range_vec_pool: Pool<Vec<Range<usize>>>,
 }
 
-impl EntityStore {
+impl EntityRegistry {
 	pub(crate) fn new() -> Self {
 		Self {
 			instances: vec![],
@@ -204,7 +204,7 @@ impl EntityStore {
 }
 
 pub struct EntityFilter<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> {
-	entity_store: &'l mut EntityStore,
+	entity_store: &'l mut EntityRegistry,
 	i_phantom: PhantomData<&'l I>,
 	e_phantom: PhantomData<&'l E>,
 }

@@ -13,7 +13,7 @@ pub mod prelude {
 	pub use crate::context::EcsContext;
 	pub use crate::archetypes::{Archetype, ArchetypeStore};
 	pub use crate::entities::{
-		Entity, EntityQuery, EntityStore, QueryBuilder, EntityFilterForEach,
+		Entity, EntityQuery, EntityRegistry, QueryBuilder, EntityFilterForEach,
 		EntityFilterParallelForEach,
 	};
 }

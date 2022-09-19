@@ -1,10 +1,10 @@
 use crate::archetypes::ArchetypeStore;
-use crate::entities::EntityStore;
+use crate::entities::EntityRegistry;
 use std::collections::HashSet;
 use crate::systems::System;
 use std::any::TypeId;
 
-pub(crate) struct SystemStore {
+pub(crate) struct SystemRegistry {
 	state: State,
 	set: HashSet<TypeId>,
 	systems: Vec<Box<dyn System>>,
@@ -18,7 +18,7 @@ enum State {
 	Initialized,
 }
 
-impl SystemStore {
+impl SystemRegistry {
 	pub fn new() -> Self {
 		Self {
 			set: HashSet::default(),
@@ -59,7 +59,7 @@ impl SystemStore {
 		}
 	}
 
-	pub fn run_systems(&mut self, entities: &mut EntityStore) {
+	pub fn run_systems(&mut self, entities: &mut EntityRegistry) {
 		match self.state {
 			State::Uninitialized | State::Initializing => {
 				panic!("Systems must be initialized before they can run");

@@ -1,5 +1,5 @@
 mod system;
-mod system_store;
+mod system_registry;
 
 pub use system::*;
-pub(crate) use system_store::*;
+pub(crate) use system_registry::*;

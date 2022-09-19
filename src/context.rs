@@ -1,6 +1,6 @@
-use crate::systems::{System, SystemStore};
+use crate::systems::{System, SystemRegistry};
 use crate::components::ComponentType;
-use crate::entities::EntityStore;
+use crate::entities::EntityRegistry;
 use crate::archetypes::Archetype;
 use std::ops::{Deref, DerefMut};
 
@@ -9,15 +9,15 @@ use std::ops::{Deref, DerefMut};
 /// All [`entities`](Entity) can be referenced using a unique identifier of type [`Entity`]
 /// and can contain an arbitrary selection of [`components`](Component) based on their [`archetype`](Archetype).
 pub struct EcsContext {
-	entity_store: EntityStore,
-	system_store: SystemStore,
+	entity_store: EntityRegistry,
+	system_store: SystemRegistry,
 }
 
 impl EcsContext {
 	pub fn new() -> Self {
 		Self {
-			entity_store: EntityStore::new(),
-			system_store: SystemStore::new(),
+			entity_store: EntityRegistry::new(),
+			system_store: SystemRegistry::new(),
 		}
 	}
 
@@ -57,7 +57,7 @@ impl Default for EcsContext {
 }
 
 impl Deref for EcsContext {
-	type Target = EntityStore;
+	type Target = EntityRegistry;
 
 	#[inline(always)]
 	fn deref(&self) -> &Self::Target {
