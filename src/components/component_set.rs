@@ -33,6 +33,16 @@ impl ComponentSet for () {
 	}
 }
 
+impl<T: 'static + ComponentTypeInfo> ComponentSet for T
+where
+	(T::ComponentType,): ComponentSet,
+{
+	#[inline]
+	fn get_bitfield() -> (Arc<BitField>, bool) {
+		<(T::ComponentType,) as ComponentSet>::get_bitfield()
+	}
+}
+
 fn make_bitfield(components: &[ComponentId]) -> (Arc<BitField>, bool) {
 	let mut bitfield = BitField::new();
 	let mut has_repeats = false;

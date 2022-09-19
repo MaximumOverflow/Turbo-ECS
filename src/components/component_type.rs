@@ -4,6 +4,12 @@ use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
 use std::any::TypeId;
 
+pub trait Component
+where
+	Self: Default,
+{
+}
+
 /// A runtime representation of a type implementing the [`Component`] trait.
 #[derive(Clone)]
 pub struct ComponentType {
@@ -49,17 +55,25 @@ impl Hash for ComponentType {
 	}
 }
 
-pub trait Component
-where
-	Self: Default,
-{
-}
-
 /// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
 /// It provides a unified way to access a component's id and type through its base type and all derived ref types.
 pub trait ComponentTypeInfo {
 	type ComponentType: ComponentTypeInfo;
 	fn component_id() -> ComponentId;
+}
+
+impl<T: ComponentTypeInfo> ComponentTypeInfo for &T {
+	type ComponentType = T::ComponentType;
+	fn component_id() -> ComponentId {
+		Self::ComponentType::component_id()
+	}
+}
+
+impl<T: ComponentTypeInfo> ComponentTypeInfo for &mut T {
+	type ComponentType = T::ComponentType;
+	fn component_id() -> ComponentId {
+		Self::ComponentType::component_id()
+	}
 }
 
 pub(crate) trait ComponentFrom<T> {
@@ -68,14 +82,14 @@ pub(crate) trait ComponentFrom<T> {
 	unsafe fn convert(value: T) -> Self;
 }
 
-impl<T: Component + Clone> ComponentFrom<*const T> for T {
+impl<T: Component + Copy> ComponentFrom<*const T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *const T) -> Self {
 		(*value).clone()
 	}
 }
 
-impl<T: Component + Clone> ComponentFrom<*mut T> for T {
+impl<T: Component + Copy> ComponentFrom<*mut T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
 		(*value).clone()
@@ -100,20 +114,6 @@ impl<T: Component> ComponentFrom<*mut T> for &mut T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
 		&mut *value
-	}
-}
-
-impl<T: ComponentTypeInfo> ComponentTypeInfo for &T {
-	type ComponentType = T::ComponentType;
-	fn component_id() -> ComponentId {
-		Self::ComponentType::component_id()
-	}
-}
-
-impl<T: ComponentTypeInfo> ComponentTypeInfo for &mut T {
-	type ComponentType = T::ComponentType;
-	fn component_id() -> ComponentId {
-		Self::ComponentType::component_id()
 	}
 }
 
