@@ -18,6 +18,7 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
         impl turbo_ecs::components::Component for #name {}
 
         impl turbo_ecs::components::component_id::HasComponentId for #name {
+            #[inline(always)]
             fn component_id() -> turbo_ecs::components::ComponentId {
                 *#id_name
             }
@@ -25,33 +26,11 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
 
         impl turbo_ecs::components::ComponentTypeInfo for #name {
             type ComponentType = #name;
+
+            #[inline(always)]
             fn component_id() -> turbo_ecs::components::ComponentId {
                 turbo_ecs::components::ComponentId::of::<#name>()
             }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<#name> for #name {
-            unsafe fn convert(value: #name) -> Self { value.clone() }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<*const #name> for #name {
-            unsafe fn convert(value: *const #name) -> Self { unsafe { *value } }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<*const #name> for &#name {
-            unsafe fn convert(value: *const #name) -> Self { unsafe { &*value } }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<*mut #name> for #name {
-            unsafe fn convert(value: *mut #name) -> Self { unsafe { *value } }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<*mut #name> for &#name {
-            unsafe fn convert(value: *mut #name) -> Self { unsafe { &mut *value } }
-        }
-
-        impl turbo_ecs::components::ComponentFrom<*mut #name> for &mut #name {
-            unsafe fn convert(value: *mut #name) -> Self { unsafe { &mut *value } }
         }
 
         impl turbo_ecs::components::ComponentSet for #name {

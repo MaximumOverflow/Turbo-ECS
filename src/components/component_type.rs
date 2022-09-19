@@ -62,19 +62,45 @@ pub trait ComponentTypeInfo {
 	fn component_id() -> ComponentId;
 }
 
-/// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
-/// #\[derive([`Component`])] will generate the following trait implementations:
-/// - ConvertFrom<T> for T
-/// - ConvertFrom<*const T> for T
-/// - ConvertFrom<*const T> for &T
-/// - ConvertFrom<*mut T> for T
-/// - ConvertFrom<*mut T> for &T
-/// - ConvertFrom<*mut T> for &mut T
-pub trait ComponentFrom<T> {
+pub(crate) trait ComponentFrom<T> {
 	/// # Safety
-	/// This function should only be implemented by #\[derive(Component)] for use by IterArchetype.
-	/// IterArchetype's implementation guarantees rust's aliasing rules are maintained.
+	/// IterArchetype's implementation guarantees Rust's aliasing rules are maintained.
 	unsafe fn convert(value: T) -> Self;
+}
+
+impl <T: Component + Clone> ComponentFrom<*const T> for T {
+	#[inline(always)]
+	unsafe fn convert(value: *const T) -> Self {
+		(*value).clone()
+	}
+}
+
+impl <T: Component + Clone> ComponentFrom<*mut T> for T {
+	#[inline(always)]
+	unsafe fn convert(value: *mut T) -> Self {
+		(*value).clone()
+	}
+}
+
+impl <T: Component> ComponentFrom<*const T> for &T {
+	#[inline(always)]
+	unsafe fn convert(value: *const T) -> Self {
+		&*value
+	}
+}
+
+impl <T: Component> ComponentFrom<*mut T> for &T {
+	#[inline(always)]
+	unsafe fn convert(value: *mut T) -> Self {
+		&*value
+	}
+}
+
+impl <T: Component> ComponentFrom<*mut T> for &mut T {
+	#[inline(always)]
+	unsafe fn convert(value: *mut T) -> Self {
+		&mut *value
+	}
 }
 
 impl<T: ComponentTypeInfo> ComponentTypeInfo for &T {

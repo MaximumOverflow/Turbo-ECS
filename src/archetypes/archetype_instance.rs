@@ -171,7 +171,7 @@ macro_rules! impl_archetype_iter {
 				fn for_each_mut(&mut self, func: &(impl Fn(($($t),*)) + Sync + Send)) {
 					unsafe {
 						$(
-                            let  [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
+                            let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
                             let [<$t:lower>] = [<$t:lower>].get_vec_mut_unchecked::<$t::ComponentType>().as_mut_ptr() as usize;
                         )*
 
