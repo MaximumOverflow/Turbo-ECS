@@ -68,35 +68,35 @@ pub(crate) trait ComponentFrom<T> {
 	unsafe fn convert(value: T) -> Self;
 }
 
-impl <T: Component + Clone> ComponentFrom<*const T> for T {
+impl<T: Component + Clone> ComponentFrom<*const T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *const T) -> Self {
 		(*value).clone()
 	}
 }
 
-impl <T: Component + Clone> ComponentFrom<*mut T> for T {
+impl<T: Component + Clone> ComponentFrom<*mut T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
 		(*value).clone()
 	}
 }
 
-impl <T: Component> ComponentFrom<*const T> for &T {
+impl<T: Component> ComponentFrom<*const T> for &T {
 	#[inline(always)]
 	unsafe fn convert(value: *const T) -> Self {
 		&*value
 	}
 }
 
-impl <T: Component> ComponentFrom<*mut T> for &T {
+impl<T: Component> ComponentFrom<*mut T> for &T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
 		&*value
 	}
 }
 
-impl <T: Component> ComponentFrom<*mut T> for &mut T {
+impl<T: Component> ComponentFrom<*mut T> for &mut T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
 		&mut *value

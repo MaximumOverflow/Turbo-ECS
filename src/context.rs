@@ -27,9 +27,7 @@ impl EcsContext {
 	}
 
 	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component) with the specified capacity.
-	pub fn create_archetype_with_capacity(
-		&mut self, components: &[ComponentType], min_capacity: usize,
-	) -> Archetype {
+	pub fn create_archetype_with_capacity(&mut self, components: &[ComponentType], min_capacity: usize) -> Archetype {
 		self.entity_store.archetype_store.create_archetype_with_capacity(components, min_capacity)
 	}
 

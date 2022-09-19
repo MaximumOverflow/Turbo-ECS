@@ -67,7 +67,7 @@ impl RangeAllocator {
 
 				self.used += size;
 				Ok(used_range)
-			}
+			},
 			None => Err(size - self.available()),
 		}
 	}
@@ -154,7 +154,7 @@ impl RangeAllocator {
 		}
 		let find_start = self.ranges.get(&range.end);
 		match find_start {
-			None => {}
+			None => {},
 			Some(extend) => {
 				let key = extend.start;
 				let mut extend = extend.clone();
@@ -169,21 +169,21 @@ impl RangeAllocator {
 					None => {
 						self.ranges.insert(extend.start, extend.clone());
 						return;
-					}
+					},
 
 					Some(key) => {
 						let key = *key;
 						let range = self.ranges.get_mut(&key).unwrap();
 						range.end = extend.end;
 						return;
-					}
+					},
 				}
-			}
+			},
 		}
 
 		let find_end = self.ranges.iter().find_map(|(k, r)| if r.end == range.start { Some(k) } else { None });
 		match find_end {
-			None => {}
+			None => {},
 			Some(key) => {
 				let key = *key;
 				let extend = self.ranges.get_mut(&key).unwrap();
@@ -191,7 +191,7 @@ impl RangeAllocator {
 				self.used -= range.len();
 				extend.end += range.len();
 				return;
-			}
+			},
 		}
 
 		self.used -= range.len();
@@ -282,7 +282,7 @@ impl Iterator for UsedRangeIterator<'_> {
 					let range = self.lst..self.cap;
 					self.lst = self.cap;
 					return Some(range);
-				}
+				},
 
 				None => return None,
 
@@ -295,7 +295,7 @@ impl Iterator for UsedRangeIterator<'_> {
 					} else {
 						continue;
 					}
-				}
+				},
 			}
 		}
 	}

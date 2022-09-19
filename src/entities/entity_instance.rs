@@ -24,14 +24,8 @@ impl Default for EntityInstance {
 #[inline(always)]
 pub(crate) fn assert_entity(entity: &Entity, instance: &EntityInstance) {
 	#[cfg(not(feature = "debug_only_assertions"))]
-	assert_eq!(
-		entity.version, instance.version,
-		"Entity has already been destroyed"
-	);
+	assert_eq!(entity.version, instance.version, "Entity has already been destroyed");
 
 	#[cfg(feature = "debug_only_assertions")]
-	debug_assert_eq!(
-		entity.version, instance.version,
-		"Entity has already been destroyed"
-	);
+	debug_assert_eq!(entity.version, instance.version, "Entity has already been destroyed");
 }

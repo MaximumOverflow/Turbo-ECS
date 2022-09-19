@@ -29,9 +29,7 @@ impl ArchetypeStore {
 
 	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component) with the specified capacity.
 	#[inline(never)]
-	pub fn create_archetype_with_capacity(
-		&mut self, components: &[ComponentType], min_capacity: usize,
-	) -> Archetype {
+	pub fn create_archetype_with_capacity(&mut self, components: &[ComponentType], min_capacity: usize) -> Archetype {
 		let set = HashSet::<ComponentId>::from_iter(components.iter().map(|i| i.id()));
 		let set: Vec<_> = set.iter().copied().collect();
 
@@ -41,9 +39,7 @@ impl ArchetypeStore {
 		}
 
 		let instance = ArchetypeInstance::with_capacity(components, min_capacity);
-		let archetype = Archetype {
-			index: self.vec.len(),
-		};
+		let archetype = Archetype { index: self.vec.len() };
 
 		// Match archetype against all queries
 		for (query, results) in self.queries.iter_mut() {
@@ -70,9 +66,7 @@ impl ArchetypeStore {
 		&mut self.vec[index]
 	}
 
-	pub(crate) fn query(
-		&mut self, query: EntityQuery,
-	) -> impl Iterator<Item = &mut ArchetypeInstance> {
+	pub(crate) fn query(&mut self, query: EntityQuery) -> impl Iterator<Item = &mut ArchetypeInstance> {
 		if self.queries.get(&query).is_none() {
 			self.init_query(query);
 		}

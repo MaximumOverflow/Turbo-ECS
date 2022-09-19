@@ -14,10 +14,8 @@ type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 lazy_static! {
 	static ref QUERY_TO_DATA: RwLock<Vec<EntityQueryData>> = RwLock::new(Vec::default());
-	static ref PTR_TO_QUERY: RwLock<HashMap<(usize, usize), EntityQuery>> =
-		RwLock::new(HashMap::default());
-	static ref TYPE_TO_QUERY: RwLock<HashMap<TypeId, EntityQuery, Hasher>> =
-		RwLock::new(HashMap::default());
+	static ref PTR_TO_QUERY: RwLock<HashMap<(usize, usize), EntityQuery>> = RwLock::new(HashMap::default());
+	static ref TYPE_TO_QUERY: RwLock<HashMap<TypeId, EntityQuery, Hasher>> = RwLock::new(HashMap::default());
 }
 
 /// A handle to [BitField] based entity filter.

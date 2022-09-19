@@ -23,7 +23,8 @@ fn create_entities(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
-                let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
+                let archetype =
+                    create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
                 (ecs, archetype)
             },
             |(mut ecs, archetype)| ecs.create_entities_from_archetype(archetype, &mut entities),

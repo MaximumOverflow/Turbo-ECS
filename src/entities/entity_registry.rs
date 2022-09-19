@@ -1,6 +1,4 @@
-use crate::archetypes::{
-	Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel,
-};
+use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel};
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use crate::components::component_id::HasComponentId;
@@ -71,9 +69,7 @@ impl EntityRegistry {
 	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
 	/// * `entities` - The slice in which to output the [`entity`](Entity) instances.
 	#[inline(never)]
-	pub fn create_entities_from_archetype(
-		&mut self, archetype: Archetype, entities: &mut [Entity],
-	) {
+	pub fn create_entities_from_archetype(&mut self, archetype: Archetype, entities: &mut [Entity]) {
 		let count = entities.len();
 		let mut slot_ranges = self.range_vec_pool.take_one();
 		let mut instance_ranges = self.range_vec_pool.take_one();
@@ -155,9 +151,7 @@ impl EntityRegistry {
 	}
 
 	/// Gets a reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component<T: 'static + Component + HasComponentId>(
-		&self, entity: &Entity,
-	) -> Option<&T> {
+	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -167,9 +161,7 @@ impl EntityRegistry {
 	}
 
 	/// Gets a mutable reference to a [`components`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component_mut<T: 'static + Component + HasComponentId>(
-		&mut self, entity: &Entity,
-	) -> Option<&mut T> {
+	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -232,8 +224,7 @@ impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, 
 	}
 }
 
-impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterForEach<I, E>
-	for EntityFilter<'_, I, E>
+impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterForEach<I, E> for EntityFilter<'_, I, E>
 where
 	ArchetypeInstance: IterateArchetype<I>,
 {
@@ -245,8 +236,7 @@ where
 	}
 }
 
-impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterParallelForEach<I, E>
-	for EntityFilter<'_, I, E>
+impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterParallelForEach<I, E> for EntityFilter<'_, I, E>
 where
 	ArchetypeInstance: IterateArchetypeParallel<I>,
 {
