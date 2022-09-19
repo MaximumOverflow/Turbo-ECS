@@ -55,10 +55,6 @@ impl EntityRegistry {
 		let mut slot_ranges = self.range_vec_pool.take_one();
 
 		let archetype_instance = self.archetype_store.get_mut(archetype.index as usize);
-
-		unsafe {
-			slot_ranges.set_len(0);
-		}
 		archetype_instance.take_slots(1, &mut slot_ranges);
 
 		instance.slot = slot_ranges[0].start as u32;
@@ -81,11 +77,6 @@ impl EntityRegistry {
 		let count = entities.len();
 		let mut slot_ranges = self.range_vec_pool.take_one();
 		let mut instance_ranges = self.range_vec_pool.take_one();
-
-		unsafe {
-			slot_ranges.set_len(0);
-			instance_ranges.set_len(0);
-		}
 
 		match self.allocator.try_allocate_fragmented(count, &mut instance_ranges) {
 			Ok(_) => {},

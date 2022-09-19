@@ -1,5 +1,5 @@
 use crate::components::component_id::HasComponentId;
-use crate::data_structures::{AnyVec, BitField};
+use crate::data_structures::{AnyBuffer, BitField};
 use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
 use std::any::TypeId;
@@ -9,16 +9,16 @@ use std::any::TypeId;
 pub struct ComponentType {
 	id: ComponentId,
 	type_id: TypeId,
-	make_vec: fn() -> AnyVec,
+	make_vec: fn() -> AnyBuffer,
 }
 
 impl ComponentType {
 	/// Returns the [`ComponentType`] of T.
-	pub fn of<T: 'static + Copy + Default + Component + HasComponentId>() -> Self {
+	pub fn of<T: 'static + Default + Component + HasComponentId>() -> Self {
 		Self {
 			id: ComponentId::of::<T>(),
 			type_id: TypeId::of::<T>(),
-			make_vec: AnyVec::new::<T>,
+			make_vec: AnyBuffer::new_default::<T>,
 		}
 	}
 
@@ -30,7 +30,7 @@ impl ComponentType {
 		self.type_id
 	}
 
-	pub fn make_vec(&self) -> AnyVec {
+	pub(crate) fn create_buffer(&self) -> AnyBuffer {
 		(self.make_vec)()
 	}
 }
@@ -51,7 +51,7 @@ impl Hash for ComponentType {
 
 pub trait Component
 where
-	Self: Copy + Default,
+	Self: Default,
 {
 }
 

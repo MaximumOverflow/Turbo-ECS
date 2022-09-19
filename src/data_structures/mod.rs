@@ -4,6 +4,7 @@ mod bit_field;
 mod range_allocator;
 
 pub use pool::*;
-pub use any_vec::*;
 pub use bit_field::*;
 pub use range_allocator::*;
+
+pub(crate) use any_vec::*;

@@ -134,6 +134,7 @@ impl RangeAllocator {
 	/// * `size` - The total amount of space to allocate
 	/// * `ranges` - The allocated ranges will be outputted here
 	pub fn try_allocate_fragmented(&mut self, size: usize, ranges: &mut Vec<Range>) -> Result<(), usize> {
+		ranges.clear();
 		if self.available() < size {
 			Err(size - self.available())
 		} else {

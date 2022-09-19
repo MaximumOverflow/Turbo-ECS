@@ -1,123 +1,118 @@
-use std::iter::repeat;
+use std::mem::{MaybeUninit, size_of};
+use std::any::TypeId;
 use std::ops::Range;
-use std::any::Any;
 
-/// A polymorphic container items of the same type.
-pub struct AnyVec {
-	vec: Box<dyn Any>,
-
-	get: fn(&Self, usize) -> &dyn Any,
-	set: fn(&mut Self, usize, &dyn Any),
-
-	clr: fn(&mut Self, usize),
-	blk_clr: fn(&mut Self, Range<usize>),
-
-	set_capacity: fn(&mut Self, usize),
+/// A polymorphic container for items of the same type.
+/// The container does not keep track of which values stored within have been initialized,
+/// nor will it automatically drop them upon destruction.
+pub(crate) struct AnyBuffer {
+	vec: Vec<u8>,
+	type_id: TypeId,
+	type_size: usize,
+	drop: fn(&mut Self, Range<usize>),
+	default: Option<fn(&mut Self, Range<usize>)>,
 }
 
-impl AnyVec {
-	/// Create a new [AnyVec] for items of type `T`.
-	pub fn new<T: 'static + Copy + Default>() -> Self {
+#[allow(dead_code)]
+impl AnyBuffer {
+	pub fn new<T: 'static>() -> Self {
 		Self::with_capacity::<T>(0)
 	}
 
-	/// Create a new [AnyVec] for items of type `T` with the specified capacity.
-	///
-	/// # Arguments
-	/// * `capacity` - A usize representing the container's target capacity
-	pub fn with_capacity<T: 'static + Copy + Default>(capacity: usize) -> Self {
-		Self {
-			vec: Box::new(vec![T::default(); capacity]),
+	pub fn new_default<T: 'static + Default>() -> Self {
+		Self::with_capacity_default::<T>(0)
+	}
 
-			get: |this, i| unsafe { &this.get_vec_unchecked::<T>()[i] },
-			set: |this, i, v| unsafe {
-				this.get_vec_mut_unchecked::<T>()[i] = *v.downcast_ref::<T>().unwrap();
-			},
+	#[allow(clippy::uninit_vec)]
+	pub fn with_capacity<T: 'static>(capacity: usize) -> Self {
+		unsafe {
+			let len = size_of::<T>() * capacity;
+			let mut vec = Vec::with_capacity(len);
+			vec.set_len(vec.capacity());
 
-			clr: |this: &mut AnyVec, i| unsafe {
-				this.get_vec_mut_unchecked::<T>()[i] = T::default();
-			},
-			blk_clr: |this: &mut AnyVec, range| unsafe {
-				let slice = &mut this.get_vec_mut_unchecked::<T>().as_mut_slice()[range];
-				slice.fill(T::default());
-			},
+			Self {
+				vec,
+				type_id: TypeId::of::<T>(),
+				type_size: size_of::<T>(),
 
-			set_capacity: |this, c| unsafe {
-				let vec = this.get_vec_mut_unchecked::<T>();
-				let count = c - vec.len();
-				vec.extend(repeat(T::default()).take(count))
-			},
+				drop: |this, range| {
+					let ptr = (this.vec.as_mut_ptr() as *mut T).add(range.start);
+					let slice = std::slice::from_raw_parts_mut(ptr, range.len());
+					std::ptr::drop_in_place(slice);
+				},
+
+				default: None,
+			}
 		}
 	}
 
-	/// Get the a reference to the underlying [Vec].
-	pub fn get_vec<T: 'static>(&self) -> Option<&Vec<T>> {
-		self.vec.downcast_ref()
+	pub fn with_capacity_default<T: 'static + Default>(capacity: usize) -> Self {
+		let mut this = Self::with_capacity::<T>(capacity);
+		this.default = Some(|this, range| unsafe {
+			let ptr = (this.vec.as_mut_ptr() as *mut T).add(range.start);
+			let slice = std::slice::from_raw_parts_mut(ptr, range.len());
+			for x in slice { std::ptr::write(x, T::default()); }
+		});
+
+		this
 	}
 
-	/// Get the a mutable reference to the underlying [Vec].
-	pub fn get_vec_mut<T: 'static>(&mut self) -> Option<&mut Vec<T>> {
-		self.vec.downcast_mut()
-	}
-
-	/// # Safety
-	/// This function expects `T` to match the internal Vec's element type.
-	pub unsafe fn get_vec_unchecked<T: 'static>(&self) -> &Vec<T> {
-		&*(self.vec.as_ref() as *const dyn Any as *const Vec<T>)
-	}
-
-	/// # Safety
-	/// `T` must the internal [Vec]'s element type.
-	pub unsafe fn get_vec_mut_unchecked<T: 'static>(&mut self) -> &mut Vec<T> {
-		&mut *(self.vec.as_mut() as *mut dyn Any as *mut Vec<T>)
-	}
-
-	/// Get a reference to the element at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to retrieve
-	pub fn get_value<T: 'static>(&self, i: usize) -> Option<&T> {
-		let vec = self.get_vec()?;
-		Some(&vec[i])
-	}
-
-	/// Get a polymorphic reference to the element at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to retrieve
-	pub fn get_value_dyn(&self, i: usize) -> &dyn Any {
-		(self.get)(self, i)
-	}
-
-	/// Set the value of element at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to modify
-	/// * `v` - The value to set the element to
-	pub fn set_value_dyn(&mut self, i: usize, v: &dyn Any) {
-		(self.set)(self, i, v)
-	}
-
-	/// Set the element at index `i` to its default value.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to clear
-	pub fn clear_value(&mut self, i: usize) {
-		(self.clr)(self, i)
-	}
-
-	/// Set the elements in `range` to their default value.
-	///
-	/// # Arguments
-	/// * `range` - The range of the elements to clear
-	pub fn clear_values(&mut self, range: Range<usize>) {
-		(self.blk_clr)(self, range)
-	}
-
-	/// Set the minimum capacity of the underlying [Vec].
-	/// # Arguments
-	/// * `capacity` - A usize representing the container's minimum capacity
+	#[allow(clippy::uninit_vec)]
 	pub fn ensure_capacity(&mut self, capacity: usize) {
-		(self.set_capacity)(self, capacity);
+		unsafe {
+			let current = self.vec.len() / self.type_size;
+			if current < capacity {
+				let needed = capacity - current;
+				self.vec.reserve(needed * self.type_size);
+				self.vec.set_len(self.vec.capacity());
+			}
+		}
+	}
+
+	/// # Safety
+	/// All values in `range` must be initialized.
+	/// `range` must be within the bounds of the buffer.
+	pub unsafe fn drop_values(&mut self, range: Range<usize>) {
+		debug_assert!(range.start < self.capacity());
+		debug_assert!(range.len() <= self.capacity() - range.start);
+
+		(self.drop)(self, range);
+	}
+
+	/// # Safety
+	/// All values in `range` must be dropped first.
+	/// `range` must be within the bounds of the buffer.
+	pub unsafe fn default_values(&mut self, range: Range<usize>) {
+		debug_assert!(range.start < self.capacity());
+		debug_assert!(range.len() <= self.capacity() - range.start);
+
+		match self.default {
+			None => panic!("Buffer does not have a default function for T"),
+			Some(default) => default(self, range),
+		}
+	}
+
+	pub fn as_slice<T: 'static>(&self) -> &[MaybeUninit<T>] {
+		assert_eq!(self.type_id, TypeId::of::<T>(), "Buffer does not contain elements of type T");
+		unsafe { self.as_slice_unchecked() }
+	}
+
+	pub unsafe fn as_slice_unchecked<T: 'static>(&self) -> &[T] {
+		let ptr = self.vec.as_ptr() as *const T;
+		std::slice::from_raw_parts(ptr, self.capacity())
+	}
+
+	pub fn as_mut_slice<T: 'static>(&mut self) -> &mut [MaybeUninit<T>] {
+		assert_eq!(self.type_id, TypeId::of::<T>(), "Buffer does not contain elements of type T");
+		unsafe { self.as_mut_slice_unchecked() }
+	}
+
+	pub unsafe fn as_mut_slice_unchecked<T: 'static>(&mut self) -> &mut [T] {
+		let ptr = self.vec.as_mut_ptr() as *mut T;
+		std::slice::from_raw_parts_mut(ptr, self.capacity())
+	}
+
+	pub fn capacity(&self) -> usize {
+		self.vec.len() / self.type_size
 	}
 }

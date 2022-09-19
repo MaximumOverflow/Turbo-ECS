@@ -5,16 +5,16 @@ use turbo_ecs::prelude::*;
 
 const COUNT: usize = 10000;
 
-#[derive(Default, Copy, Clone, Component)]
+#[derive(Default, Component)]
 struct Transform(Mat4);
 
-#[derive(Default, Copy, Clone, Component)]
+#[derive(Default, Component)]
 struct Translation(Vec3);
 
-#[derive(Default, Copy, Clone, Component)]
+#[derive(Default, Component)]
 struct Rotation(Vec3);
 
-#[derive(Default, Copy, Clone, Component)]
+#[derive(Default, Component)]
 struct Velocity(Vec3);
 
 fn create_entities(c: &mut Criterion) {
@@ -23,8 +23,7 @@ fn create_entities(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
-                let archetype =
-                    create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
+                let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
                 (ecs, archetype)
             },
             |(mut ecs, archetype)| ecs.create_entities_from_archetype(archetype, &mut entities),
