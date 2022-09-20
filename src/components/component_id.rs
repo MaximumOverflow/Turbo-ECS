@@ -49,7 +49,10 @@ impl From<&[ComponentId]> for BitField {
 /// Always safe when called from library code for newly instantiated [components](Component).  
 /// To be called from code generated from #[derive([Component])].
 pub unsafe fn get_next() -> ComponentId {
-	ComponentId {
-		value: NEXT_ID.fetch_add(1, Relaxed),
-	}
+	let value = NEXT_ID.fetch_add(1, Relaxed);
+	debug_assert!(
+		value <= u32::MAX as usize,
+		"This is an insane number of components. Please seek help."
+	);
+	ComponentId { value }
 }

@@ -118,6 +118,17 @@ impl ArchetypeInstance {
 		}
 	}
 
+	/// Return a `slot` to the pool.
+	/// All associated components will NOT be dropped.
+	///
+	/// # Safety
+	/// - `slot` must be within range from 0 to `capacity`
+	/// - All associated components' ownership must be transferred to another archetype,
+	/// failure to do so will result in memory leaks and/or other unintended behaviour.
+	pub unsafe fn return_slot_no_drop(&mut self, slot: usize) {
+		self.allocator.free(slot..slot + 1);
+	}
+
 	pub fn matches_query(&self, set: &BitField) -> bool {
 		set.is_subset_of(&self.component_bitfield)
 	}

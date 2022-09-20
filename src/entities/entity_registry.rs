@@ -261,7 +261,7 @@ impl EntityRegistry {
 		// so they can be safely overwritten too.
 		unsafe {
 			src.copy_components(dst, src_slot, dst_slot);
-			src.return_slots_no_drop(std::slice::from_ref(&src_slot));
+			src.return_slot_no_drop(src_slot);
 		}
 
 		Some(((src.id(), src_slot), (dst.id(), dst_slot)))

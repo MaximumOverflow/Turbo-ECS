@@ -1,7 +1,7 @@
 use crate::archetypes::{Archetype, ArchetypeInstance};
+use std::hash::{BuildHasherDefault, Hash};
 use crate::data_structures::BitField;
 use crate::components::ComponentType;
-use std::hash::BuildHasherDefault;
 use crate::entities::EntityQuery;
 use nohash_hasher::NoHashHasher;
 use std::collections::HashMap;
@@ -13,17 +13,17 @@ pub(crate) struct ArchetypeStore {
 	vec: Vec<ArchetypeInstance>,
 	map: HashMap<BitField, Archetype>,
 	queries: HashMap<EntityQuery, Vec<usize>, Hasher>,
-	transitions: HashMap<ArchetypeTransition, Archetype>,
+	transitions: HashMap<ArchetypeTransition, Archetype, Hasher>,
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone)]
 pub(crate) struct ArchetypeTransition {
 	pub archetype: Archetype,
 	pub component: ComponentType,
 	pub kind: ArchetypeTransitionKind,
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub(crate) enum ArchetypeTransitionKind {
 	Add,
 	Remove,
@@ -36,7 +36,7 @@ impl ArchetypeStore {
 			queries: HashMap::default(),
 			map: HashMap::from([(BitField::new(), Archetype::default())]),
 			vec: vec![ArchetypeInstance::new(Archetype { index: 0 }, &[])],
-			transitions: HashMap::new(),
+			transitions: HashMap::default(),
 		}
 	}
 
@@ -187,5 +187,22 @@ impl ArchetypeStore {
 		});
 
 		self.queries.insert(query, indices.collect());
+	}
+}
+
+impl Eq for ArchetypeTransition {}
+
+impl PartialEq<Self> for ArchetypeTransition {
+	fn eq(&self, other: &Self) -> bool {
+		(self.component == other.component) | (self.archetype == other.archetype) | (self.kind == other.kind)
+	}
+}
+
+impl Hash for ArchetypeTransition {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		let kind = self.kind as usize;
+		let archetype = self.archetype.index << 33;
+		let component = self.component.id().value() << 1;
+		state.write_usize(kind | archetype | component);
 	}
 }
