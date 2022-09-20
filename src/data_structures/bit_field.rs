@@ -9,7 +9,7 @@ const ALL_BITS_SET: u32 = u32::MAX;
 const FIRST_BIT: u32 = 1 << (BITS - 1);
 
 /// A dynamically sized bit-field.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BitField {
 	values: Vec<u32>,
 }
@@ -133,6 +133,17 @@ impl BitField {
 		}
 	}
 
+	/// Copies all bits from another [BitField]
+	pub fn copy_from(&mut self, other: &BitField) {
+		if self.values.len() > other.values.len() {
+			self.values[other.values.len()..].fill(0);
+		} else {
+			self.ensure_capacity(other.capacity());
+		}
+
+		self.values.copy_from_slice(&other.values);
+	}
+
 	/// Check if the [BitField] is a subset of another [BitField].
 	pub fn is_subset_of(&self, other: &BitField) -> bool {
 		if self.values.is_empty() || other.values.is_empty() {
@@ -159,6 +170,15 @@ impl BitField {
 		}
 	}
 
+	/// Reserve an additional `count` bits (minimum).
+	pub fn reserve(&mut self, count: usize) {
+		let mut new = count / BITS;
+		if new * BITS < count {
+			new += 1;
+		}
+		self.values.extend(repeat(0).take(new));
+	}
+
 	/// Get the [BitField]'s capacity in bits.
 	pub fn capacity(&self) -> usize {
 		self.values.len() * BITS
@@ -167,15 +187,6 @@ impl BitField {
 	/// Iterate over the ranges of set bits.
 	pub fn iter_ranges(&self) -> BitFieldRangeIterator {
 		BitFieldRangeIterator::new(&self.values)
-	}
-
-	/// Reserve an additional `count` bits (minimum).
-	pub fn reserve(&mut self, count: usize) {
-		let mut new = count / BITS;
-		if new * BITS < count {
-			new += 1;
-		}
-		self.values.extend(repeat(0).take(new));
 	}
 
 	#[inline(never)]

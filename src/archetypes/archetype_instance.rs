@@ -1,7 +1,7 @@
 use crate::components::{Component, ComponentFrom, ComponentType, ComponentTypeInfo};
 use crate::data_structures::{AnyBuffer, BitField, RangeAllocator};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use std::hash::BuildHasherDefault;
+use std::hash::{BuildHasherDefault, Hash};
 use nohash_hasher::NoHashHasher;
 use std::collections::HashMap;
 use std::any::TypeId;
@@ -11,12 +11,13 @@ use paste::paste;
 type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
 /// An [EcsContext](crate::context::EcsContext) relative handle to a set of [Component](crate::components::Component)s.
-#[derive(Default, Eq, PartialEq, Copy, Clone)]
+#[derive(Default, Hash, Eq, PartialEq, Copy, Clone)]
 pub struct Archetype {
 	pub(crate) index: usize,
 }
 
 pub struct ArchetypeInstance {
+	id: Archetype,
 	bitfield: BitField,
 	allocator: RangeAllocator,
 	component_bitfield: BitField,
@@ -25,11 +26,11 @@ pub struct ArchetypeInstance {
 }
 
 impl ArchetypeInstance {
-	pub(crate) fn new(components: &[ComponentType]) -> Self {
-		Self::with_capacity(components, 0)
+	pub fn new(id: Archetype, components: &[ComponentType]) -> Self {
+		Self::with_capacity(id, components, 0)
 	}
 
-	pub(crate) fn with_capacity(components: &[ComponentType], capacity: usize) -> Self {
+	pub fn with_capacity(id: Archetype, components: &[ComponentType], capacity: usize) -> Self {
 		let mut component_bitfield = BitField::new();
 		let bitfield = BitField::with_capacity(capacity);
 		let allocator = RangeAllocator::with_capacity(capacity);
@@ -48,6 +49,7 @@ impl ArchetypeInstance {
 		}));
 
 		Self {
+			id,
 			buffers,
 			bitfield,
 			allocator,
@@ -58,7 +60,7 @@ impl ArchetypeInstance {
 
 	/// Allocate `count` slots, setting all components to their default value.
 	/// The returned slot chunks might be fragmented.
-	pub(crate) fn take_slots(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
+	pub fn take_slots(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
 		self.take_slots_no_init(count, ranges);
 		for buffer in self.buffers.values_mut() {
 			for range in ranges.iter() {
@@ -71,7 +73,7 @@ impl ArchetypeInstance {
 
 	/// Allocate `count` slots.
 	/// The returned slot chunks might be fragmented.
-	pub(crate) fn take_slots_no_init(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
+	pub fn take_slots_no_init(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
 		ranges.clear();
 		match self.allocator.try_allocate_fragmented(count, ranges) {
 			Ok(_) => {},
@@ -90,7 +92,7 @@ impl ArchetypeInstance {
 	///
 	/// # Safety
 	/// - All slots must be within range from 0 to `capacity`. Repeated values are allowed.
-	pub(crate) unsafe fn return_slots(&mut self, slots: &[usize]) {
+	pub unsafe fn return_slots(&mut self, slots: &[usize]) {
 		self.bitfield.clear();
 		self.bitfield.set_batch_unchecked::<true>(slots);
 		for range in self.bitfield.iter_ranges() {
@@ -108,7 +110,7 @@ impl ArchetypeInstance {
 	/// - All slots must be within range from 0 to `capacity`. Repeated values are allowed.
 	/// - All associated components' ownership must be transferred to another archetype,
 	/// failure to do so will result in memory leaks and/or other unintended behaviour.
-	pub(crate) unsafe fn return_slots_no_drop(&mut self, slots: &[usize]) {
+	pub unsafe fn return_slots_no_drop(&mut self, slots: &[usize]) {
 		self.bitfield.clear();
 		self.bitfield.set_batch_unchecked::<true>(slots);
 		for range in self.bitfield.iter_ranges() {
@@ -116,11 +118,11 @@ impl ArchetypeInstance {
 		}
 	}
 
-	pub(crate) fn matches_query(&self, set: &BitField) -> bool {
+	pub fn matches_query(&self, set: &BitField) -> bool {
 		set.is_subset_of(&self.component_bitfield)
 	}
 
-	pub(crate) fn ensure_capacity(&mut self, capacity: usize) {
+	pub fn ensure_capacity(&mut self, capacity: usize) {
 		if self.allocator.capacity() < capacity {
 			self.bitfield.ensure_capacity(capacity);
 			self.allocator.ensure_capacity(capacity);
@@ -130,7 +132,7 @@ impl ArchetypeInstance {
 		}
 	}
 
-	pub(crate) fn get_component<T: Component>(&self, slot: usize) -> Option<&T> {
+	pub fn get_component<T: Component>(&self, slot: usize) -> Option<&T> {
 		unsafe {
 			let buffer = self.buffers.get(&TypeId::of::<T>())?;
 			let vec = buffer.as_slice_unchecked::<T>();
@@ -138,7 +140,7 @@ impl ArchetypeInstance {
 		}
 	}
 
-	pub(crate) fn get_component_mut<T: Component>(&mut self, slot: usize) -> Option<&mut T> {
+	pub fn get_component_mut<T: Component>(&mut self, slot: usize) -> Option<&mut T> {
 		unsafe {
 			let buffer = self.buffers.get_mut(&TypeId::of::<T>())?;
 			let vec = buffer.as_mut_slice_unchecked::<T>();
@@ -146,19 +148,30 @@ impl ArchetypeInstance {
 		}
 	}
 
-	pub(crate) fn components(&self) -> &[ComponentType] {
+	pub fn id(&self) -> Archetype {
+		self.id
+	}
+
+	pub fn components(&self) -> &[ComponentType] {
 		&self.components
 	}
 
-	pub(crate) fn component_bitfield(&self) -> &BitField {
+	pub fn component_bitfield(&self) -> &BitField {
 		&self.component_bitfield
 	}
 
-	pub(crate) unsafe fn copy_components(&self, dst: &mut ArchetypeInstance, src_idx: usize, dst_idx: usize) {
+	pub unsafe fn copy_components(&self, dst: &mut ArchetypeInstance, src_idx: usize, dst_idx: usize) {
 		for (key, src) in self.buffers.iter() {
 			if let Some(dst) = dst.buffers.get_mut(key) {
-				dst.drop_values(dst_idx..dst_idx + 1);
 				src.copy_values(dst, src_idx..src_idx + 1, dst_idx);
+			}
+		}
+	}
+
+	pub unsafe fn copy_component_range(&self, dst: &mut ArchetypeInstance, src_range: Range<usize>, dst_idx: usize) {
+		for (key, src) in self.buffers.iter() {
+			if let Some(dst) = dst.buffers.get_mut(key) {
+				src.copy_values(dst, src_range.clone(), dst_idx);
 			}
 		}
 	}

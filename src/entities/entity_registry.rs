@@ -1,5 +1,8 @@
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
-use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterArchetype, IterArchetypeParallel};
+use crate::archetypes::{
+	Archetype, ArchetypeInstance, ArchetypeStore, ArchetypeTransition, ArchetypeTransitionKind, IterArchetype,
+	IterArchetypeParallel,
+};
 use crate::components::{Component, ComponentSet, ComponentType};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use std::ops::{DerefMut, Range};
@@ -168,38 +171,79 @@ impl EntityRegistry {
 
 	/// Add a new [component](Component) to the specified [entity](Entity).  
 	/// The function will return *false* if a [component](Component) of the same type is already present.
-	pub fn add_component_data<T: Component>(&mut self, entity: &Entity, value: T) -> bool {
+	pub fn add_component<T: Component>(&mut self, entity: &Entity, value: T) -> bool {
+		let component = ComponentType::of::<T>();
+		let kind = ArchetypeTransitionKind::Add;
+		let transition = self.apply_archetype_transition(entity, component, kind);
+
+		match transition {
+			None => false,
+			Some((_, (archetype, slot))) => unsafe {
+				let dst = self.archetype_store.get_mut(archetype.index);
+				std::ptr::write(dst.get_component_mut(slot).unwrap(), value);
+				true
+			},
+		}
+	}
+
+	/// Remove a [component](Component) from the specified [entity](Entity).  
+	/// The function will return *false* if the [component](Component) is not present.
+	pub fn remove_component<T: Component>(&mut self, entity: &Entity) -> bool {
+		let component = ComponentType::of::<T>();
+		let kind = ArchetypeTransitionKind::Remove;
+		let transition = self.apply_archetype_transition(entity, component, kind);
+
+		match transition {
+			None => false,
+			Some(((archetype, slot), _)) => unsafe {
+				let src = self.archetype_store.get_mut(archetype.index);
+				std::ptr::drop_in_place(src.get_component_mut::<T>(slot).unwrap());
+				true
+			},
+		}
+	}
+
+	/// Create a new filter for the currently existing [entities](Entity).
+	///
+	/// The filter can then be used to iterate over those [entities](Entity)
+	/// or perform other kinds of operations.
+	#[inline(always)]
+	pub fn filter(&mut self) -> EntityFilter<(), ()> {
+		EntityFilter {
+			entity_store: self,
+			i_phantom: PhantomData::default(),
+			e_phantom: PhantomData::default(),
+		}
+	}
+
+	fn reserve_entity_space(&mut self, size: usize) {
+		self.allocator.reserve(size);
+		self.bitfield.reserve(size);
+		self.instances.extend(repeat_with(Default::default).take(size));
+	}
+
+	#[inline(never)]
+	fn apply_archetype_transition(
+		&mut self, entity: &Entity, component: ComponentType, kind: ArchetypeTransitionKind,
+	) -> Option<((Archetype, usize), (Archetype, usize))> {
 		let instance = &mut self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
-		let (src, dst) = {
-			let dst_archetype_id = {
-				let src_archetype = self.archetype_store.get(instance.archetype as usize);
-				if src_archetype.component_bitfield().get(T::component_id().value()) {
-					return false;
-				}
+		let transition = self.archetype_store.get_archetype_transition(ArchetypeTransition {
+			archetype: Archetype {
+				index: instance.archetype as usize,
+			},
+			component,
+			kind,
+		});
 
-				let mut components = Vec::from(src_archetype.components());
-
-				components.push(ComponentType::of::<T>());
-				self.archetype_store.create_archetype(&components)
-			};
-
-			// SAFETY: Always safe.
-			// The two ArchetypeInstance references cannot overlap.
-			unsafe {
-				let dst_archetype = self.archetype_store.get_mut(dst_archetype_id.index);
-				let dst_archetype = &mut *(dst_archetype as *mut ArchetypeInstance);
-
-				let src_archetype = self.archetype_store.get_mut(instance.archetype as usize);
-				let src_archetype = &mut *(src_archetype as *mut ArchetypeInstance);
-
-				instance.archetype = dst_archetype_id.index as u16;
-				(src_archetype, dst_archetype)
-			}
+		let (src, dst) = match transition {
+			None => return None,
+			Some((src, dst)) => (src, dst),
 		};
 
 		let src_slot = instance.slot as usize;
+		instance.archetype = dst.id().index as u16;
 
 		let dst_slot = {
 			let mut slots = self.range_vec_pool.take_one();
@@ -218,33 +262,13 @@ impl EntityRegistry {
 		unsafe {
 			src.copy_components(dst, src_slot, dst_slot);
 			src.return_slots_no_drop(std::slice::from_ref(&src_slot));
-			std::ptr::write(dst.get_component_mut(dst_slot).unwrap(), value);
 		}
 
-		true
-	}
-
-	/// Create a new filter for the currently existing [entities](Entity).
-	/// 
-	/// The filter can then be used to iterate over those [entities](Entity) 
-	/// or perform other kinds of operations.
-	#[inline(always)]
-	pub fn filter(&mut self) -> EntityFilter<(), ()> {
-		EntityFilter {
-			entity_store: self,
-			i_phantom: PhantomData::default(),
-			e_phantom: PhantomData::default(),
-		}
-	}
-
-	fn reserve_entity_space(&mut self, size: usize) {
-		self.allocator.reserve(size);
-		self.bitfield.reserve(size);
-		self.instances.extend(repeat_with(Default::default).take(size));
+		Some(((src.id(), src_slot), (dst.id(), dst_slot)))
 	}
 }
 
-/// It defines the set of [components](Component) an [entity](Entity) must or must not include. 
+/// It defines the set of [components](Component) an [entity](Entity) must or must not include.
 pub struct EntityFilter<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> {
 	entity_store: &'l mut EntityRegistry,
 	i_phantom: PhantomData<&'l I>,
