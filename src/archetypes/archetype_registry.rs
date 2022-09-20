@@ -23,10 +23,11 @@ pub(crate) struct ArchetypeTransition {
 	pub kind: ArchetypeTransitionKind,
 }
 
+#[repr(usize)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub(crate) enum ArchetypeTransitionKind {
-	Add,
-	Remove,
+	Add = 0,
+	Remove = 1,
 }
 
 impl ArchetypeStore {

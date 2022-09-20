@@ -62,7 +62,6 @@ impl AnyBuffer {
 		this
 	}
 
-	#[allow(clippy::uninit_vec)]
 	pub fn ensure_capacity(&mut self, capacity: usize) {
 		unsafe {
 			let current = self.capacity();
@@ -130,6 +129,11 @@ impl AnyBuffer {
 	/// # Safety
 	/// `T` must match the buffer's internal type.
 	pub unsafe fn as_slice_unchecked<T: 'static>(&self) -> &[T] {
+		debug_assert_eq!(
+			self.type_id,
+			TypeId::of::<T>(),
+			"Buffer does not contain elements of type T"
+		);
 		let ptr = self.buffer.as_ptr() as *const T;
 		std::slice::from_raw_parts(ptr, self.capacity())
 	}
@@ -146,6 +150,11 @@ impl AnyBuffer {
 	/// # Safety
 	/// `T` must match the buffer's internal type.
 	pub unsafe fn as_mut_slice_unchecked<T: 'static>(&mut self) -> &mut [T] {
+		debug_assert_eq!(
+			self.type_id,
+			TypeId::of::<T>(),
+			"Buffer does not contain elements of type T"
+		);
 		let ptr = self.buffer.as_mut_ptr() as *mut T;
 		std::slice::from_raw_parts_mut(ptr, self.capacity())
 	}

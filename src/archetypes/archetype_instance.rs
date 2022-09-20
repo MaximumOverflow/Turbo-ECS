@@ -147,6 +147,8 @@ impl ArchetypeInstance {
 		unsafe {
 			let buffer = self.buffers.get(&TypeId::of::<T>())?;
 			let vec = buffer.as_slice_unchecked::<T>();
+
+			debug_assert!(slot < vec.len());
 			Some(vec.get_unchecked(slot))
 		}
 	}
@@ -155,6 +157,8 @@ impl ArchetypeInstance {
 		unsafe {
 			let buffer = self.buffers.get_mut(&TypeId::of::<T>())?;
 			let vec = buffer.as_mut_slice_unchecked::<T>();
+			
+			debug_assert!(slot < vec.len());
 			Some(vec.get_unchecked_mut(slot))
 		}
 	}

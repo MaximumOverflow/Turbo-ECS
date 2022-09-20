@@ -52,6 +52,18 @@ impl BitField {
 		}
 	}
 
+	/// Get the value of the bit at index `i`.
+	/// # Safety
+	/// Parameter `i` must be in range from 0 to `capacity`.
+	#[inline(always)]
+	pub unsafe fn get_inlined_unchecked(&self, i: usize) -> bool {
+		debug_assert!(i < self.capacity(), "Index out of bounds");
+		let (position, shift) = Self::pos_shift(i);
+		let bit_value = self.values.get_unchecked(position) ;
+		let bit = FIRST_BIT >> shift;
+		(bit_value & bit as u32) != 0
+	}
+
 	/// Set the value of the bit at index `i`.
 	#[inline(always)]
 	pub fn set_inlined(&mut self, i: usize, value: bool) {
@@ -83,6 +95,8 @@ impl BitField {
 	/// Parameter `i` must be in range from 0 to `capacity`.
 	#[inline(always)]
 	pub unsafe fn set_inlined_unchecked(&mut self, i: usize, value: bool) {
+		debug_assert!(i < self.capacity(), "Index out of bounds");
+
 		let (position, shift) = Self::pos_shift(i);
 		let bit = FIRST_BIT >> shift;
 
@@ -105,6 +119,8 @@ impl BitField {
 	/// Parameter `i` must be in range from 0 to `capacity`.
 	#[inline(always)]
 	pub unsafe fn set_inlined_unchecked_atomic(&mut self, i: usize, value: bool) {
+		debug_assert!(i < self.capacity(), "Index out of bounds");
+
 		let (position, shift) = Self::pos_shift(i);
 		let bit = FIRST_BIT >> shift;
 
