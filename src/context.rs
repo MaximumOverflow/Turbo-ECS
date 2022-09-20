@@ -4,16 +4,17 @@ use crate::entities::EntityRegistry;
 use crate::archetypes::Archetype;
 use std::ops::{Deref, DerefMut};
 
-/// A container for [`entities`](Entity) and systems.
-///
-/// All [`entities`](Entity) can be referenced using a unique identifier of type [`Entity`]
-/// and can contain an arbitrary selection of [`components`](Component) based on their [`archetype`](Archetype).
+/// A container for
+/// [Entities](crate::entities::Entity),
+/// [Components](crate::components::Component) and
+/// [Systems](crate::systems::System).
 pub struct EcsContext {
 	entity_store: EntityRegistry,
 	system_store: SystemRegistry,
 }
 
 impl EcsContext {
+	/// Creates a new [EcsContext].
 	pub fn new() -> Self {
 		Self {
 			entity_store: EntityRegistry::new(),
@@ -21,12 +22,12 @@ impl EcsContext {
 		}
 	}
 
-	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component).
+	/// Creates an [archetype](crate::archetypes::Archetype) containing the specified [`components`](crate::components::Component).
 	pub fn create_archetype(&mut self, components: &[ComponentType]) -> Archetype {
 		self.entity_store.archetype_store.create_archetype(components)
 	}
 
-	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component) with the specified capacity.
+	/// Creates an [archetype](crate::archetypes::Archetype) containing the specified [`components`](crate::components::Component) with the specified capacity.
 	pub fn create_archetype_with_capacity(&mut self, components: &[ComponentType], min_capacity: usize) -> Archetype {
 		self.entity_store.archetype_store.create_archetype_with_capacity(components, min_capacity)
 	}
@@ -39,7 +40,7 @@ impl EcsContext {
 	/// Initialize all [systems](System)
 	/// Must be called before any system can be run.
 	pub fn setup_systems(&mut self) {
-		self.system_store.setup_systems(&mut self.entity_store.archetype_store);
+		self.system_store.setup_systems();
 	}
 
 	/// Execute all [systems](System).

@@ -1,3 +1,5 @@
+//! A set of utilities primarily designed for memory management and low level performance optimizations.
+
 mod pool;
 mod any_buffer;
 mod bit_field;

@@ -1,12 +1,12 @@
-use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel};
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
+use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterArchetype, IterArchetypeParallel};
 use crate::components::{Component, ComponentSet, ComponentType};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
-use crate::components::component_id::HasComponentId;
 use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
 use std::iter::repeat_with;
 
+/// A container for [Entities](crate::entities::Entity) and their associated [Components](crate::components::Component).
 pub struct EntityRegistry {
 	allocator: RangeAllocator,
 	instances: Vec<EntityInstance>,
@@ -30,14 +30,12 @@ impl EntityRegistry {
 		}
 	}
 
-	/// Creates a single [`entity`](Entity) with no [`components`](Component) attached.
+	/// Creates a single [entity](Entity) with no [components](Component) attached.
 	pub fn create_entity(&mut self) -> Entity {
 		self.create_entity_from_archetype(Archetype::default())
 	}
 
-	/// Creates a single [`entity`](Entity) belonging to the specified [`archetype`](Archetype).
-	/// # Arguments
-	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
+	/// Creates a single [entity](Entity) belonging to the specified [archetype](Archetype).
 	#[inline(never)]
 	pub fn create_entity_from_archetype(&mut self, archetype: Archetype) -> Entity {
 		let index = match self.allocator.try_allocate(1) {
@@ -64,10 +62,8 @@ impl EntityRegistry {
 		}
 	}
 
-	/// Creates a series of [`entities`](Entity) belonging to the specified [`archetype`](Archetype).
-	/// # Arguments
-	/// * `archetype` - The [`archetype`](Archetype) from which to construct the [`entity`](Entity) instances.
-	/// * `entities` - The slice in which to output the [`entity`](Entity) instances.
+	/// Creates a series of [entities](Entity) belonging to the specified [archetype](Archetype).  
+	/// The new [entities](Entity) will be written into the provided slice.
 	#[inline(never)]
 	pub fn create_entities_from_archetype(&mut self, archetype: Archetype, entities: &mut [Entity]) {
 		let count = entities.len();
@@ -103,8 +99,8 @@ impl EntityRegistry {
 		}
 	}
 
-	/// Destroys the provided [`entities`](Entity).
-	/// This function will panic if it encounters an invalid [`entity`](Entity).
+	/// Destroys the provided [entities](Entity).  
+	/// This function will panic if it encounters an invalid [entity](Entity).
 	#[inline(never)]
 	pub fn destroy_entities(&mut self, entities: &[Entity]) {
 		unsafe {
@@ -150,8 +146,8 @@ impl EntityRegistry {
 		}
 	}
 
-	/// Gets a reference to a [`component`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
+	/// Gets a reference to a [component](Component) bound to a specific [entity](Entity).
+	pub fn get_component<T: Component>(&self, entity: &Entity) -> Option<&T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -160,8 +156,8 @@ impl EntityRegistry {
 		unsafe { Some(&*(component as *const T)) }
 	}
 
-	/// Gets a mutable reference to a [`component`](Component) bound to a specific [`entity`](Entity).
-	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
+	/// Gets a mutable reference to a [component](Component) bound to a specific [entity](Entity).
+	pub fn get_component_mut<T: Component>(&mut self, entity: &Entity) -> Option<&mut T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -170,7 +166,9 @@ impl EntityRegistry {
 		unsafe { Some(&mut *(component as *mut T)) }
 	}
 
-	pub fn add_component_data<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity, value: T) -> bool {
+	/// Add a new [component](Component) to the specified [entity](Entity).  
+	/// The function will return *false* if a [component](Component) of the same type is already present.
+	pub fn add_component_data<T: Component>(&mut self, entity: &Entity, value: T) -> bool {
 		let instance = &mut self.instances[entity.index as usize];
 		assert_entity(entity, instance);
 
@@ -226,6 +224,10 @@ impl EntityRegistry {
 		true
 	}
 
+	/// Create a new filter for the currently existing [entities](Entity).
+	/// 
+	/// The filter can then be used to iterate over those [entities](Entity) 
+	/// or perform other kinds of operations.
 	#[inline(always)]
 	pub fn filter(&mut self) -> EntityFilter<(), ()> {
 		EntityFilter {
@@ -242,27 +244,35 @@ impl EntityRegistry {
 	}
 }
 
+/// It defines the set of [components](Component) an [entity](Entity) must or must not include. 
 pub struct EntityFilter<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> {
 	entity_store: &'l mut EntityRegistry,
 	i_phantom: PhantomData<&'l I>,
 	e_phantom: PhantomData<&'l E>,
 }
 
+/// It allows for iteration over a set of matching [entities](Entity) in an [EntityFilter].
 pub trait EntityFilterForEach<I: 'static + ComponentSet, E: 'static + ComponentSet>
 where
-	ArchetypeInstance: IterateArchetype<I>,
+	ArchetypeInstance: IterArchetype<I>,
 {
+	/// Iterate all matching entities with the provided function.
 	fn for_each(self, func: impl FnMut(<(I, E) as ComponentQuery>::Arguments));
 }
 
+/// It allows for parallel iteration over a set of matching [entities](Entity) in an [EntityFilter].
 pub trait EntityFilterParallelForEach<I: 'static + ComponentSet, E: 'static + ComponentSet>
 where
-	ArchetypeInstance: IterateArchetypeParallel<I>,
+	ArchetypeInstance: IterArchetypeParallel<I>,
 {
+	/// Iterate all matching entities in parallel with the provided function.
 	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync));
 }
 
 impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, I, E> {
+	/// It specifies which [components](Component) an [entity](Entity) must include to be picked up by the [EntityFilter].  
+	/// This function creates a new [EntityFilter] each time it's invoked, so it should ideally only be called once
+	/// with all the desired [component](Component) types.
 	pub fn include<TI: 'static + ComponentSet>(self) -> EntityFilter<'l, TI, E> {
 		EntityFilter {
 			entity_store: self.entity_store,
@@ -271,6 +281,9 @@ impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, 
 		}
 	}
 
+	/// It specifies which [components](Component) an [entity](Entity) must not include to be picked up by the [EntityFilter].  
+	/// This function creates a new [EntityFilter] each time it's invoked, so it should ideally only be called once
+	/// with all the desired [component](Component) types.
 	pub fn exclude<TE: 'static + ComponentSet>(self) -> EntityFilter<'l, I, TE> {
 		EntityFilter {
 			entity_store: self.entity_store,
@@ -282,19 +295,19 @@ impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, 
 
 impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterForEach<I, E> for EntityFilter<'_, I, E>
 where
-	ArchetypeInstance: IterateArchetype<I>,
+	ArchetypeInstance: IterArchetype<I>,
 {
 	fn for_each(self, mut func: impl FnMut(<(I, E) as ComponentQuery>::Arguments)) {
 		let query = <(I, E)>::get_query();
 		for archetype in self.entity_store.archetype_store.query(query) {
-			IterateArchetype::for_each_mut(archetype, &mut func);
+			IterArchetype::for_each_mut(archetype, &mut func);
 		}
 	}
 }
 
 impl<I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilterParallelForEach<I, E> for EntityFilter<'_, I, E>
 where
-	ArchetypeInstance: IterateArchetypeParallel<I>,
+	ArchetypeInstance: IterArchetypeParallel<I>,
 {
 	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync)) {
 		let query = <(I, E)>::get_query();
@@ -302,6 +315,6 @@ where
 		self.entity_store
 			.archetype_store
 			.query(query)
-			.for_each(|archetype| IterateArchetypeParallel::for_each_mut(archetype, &func));
+			.for_each(|archetype| IterArchetypeParallel::for_each_mut(archetype, &func));
 	}
 }

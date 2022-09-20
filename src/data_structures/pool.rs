@@ -9,6 +9,7 @@ pub struct Pool<T: Default> {
 	values: Rc<RefCell<Vec<T>>>,
 }
 
+/// A handle to a borrowed object in a [Pool]
 pub struct PoolBorrow<T> {
 	value: MaybeUninit<T>,
 	values: Rc<RefCell<Vec<T>>>,

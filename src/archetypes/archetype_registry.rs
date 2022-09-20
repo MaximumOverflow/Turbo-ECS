@@ -7,7 +7,7 @@ use nohash_hasher::NoHashHasher;
 
 type Hasher = BuildHasherDefault<NoHashHasher<usize>>;
 
-pub struct ArchetypeStore {
+pub(crate) struct ArchetypeStore {
 	vec: Vec<ArchetypeInstance>,
 	map: HashMap<Vec<ComponentId>, Archetype>,
 	queries: HashMap<EntityQuery, Vec<usize>, Hasher>,
@@ -22,12 +22,12 @@ impl ArchetypeStore {
 		}
 	}
 
-	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component).
+	/// Creates an [archetype](crate::archetypes::Archetype) containing the specified [components](crate::components::Component).
 	pub fn create_archetype(&mut self, components: &[ComponentType]) -> Archetype {
 		self.create_archetype_with_capacity(components, 0)
 	}
 
-	/// Creates an [`archetype`](Archetype) containing the specified [`components`](Component) with the specified capacity.
+	/// Creates an [archetype](crate::archetypes::Archetype) containing the specified [components](crate::components::Component) with the specified capacity.
 	#[inline(never)]
 	pub fn create_archetype_with_capacity(&mut self, components: &[ComponentType], min_capacity: usize) -> Archetype {
 		let set = HashSet::<ComponentId>::from_iter(components.iter().map(|i| i.id()));

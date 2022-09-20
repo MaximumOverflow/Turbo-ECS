@@ -21,10 +21,7 @@ impl BitField {
 		Self { values: Vec::new() }
 	}
 
-	/// Create a new [BitField] with the specified capacity.
-	///
-	/// # Arguments
-	/// * `capacity` - A usize representing the container's target capacity in bits
+	/// Create a new [BitField] with the specified capacity in bits.
 	pub fn with_capacity(capacity: usize) -> Self {
 		let mut instance = Self { values: Vec::new() };
 		instance.ensure_capacity(capacity);
@@ -32,25 +29,16 @@ impl BitField {
 	}
 
 	/// Get the value of the bit at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to retrieve
 	pub fn get(&self, i: usize) -> bool {
 		self.get_inlined(i)
 	}
 
 	/// Set the value of the bit at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to modify
 	pub fn set(&mut self, i: usize, value: bool) {
 		self.set_inlined(i, value)
 	}
 
 	/// Get the value of the bit at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to retrieve
 	#[inline(always)]
 	pub fn get_inlined(&self, i: usize) -> bool {
 		let (position, shift) = Self::pos_shift(i);
@@ -65,9 +53,6 @@ impl BitField {
 	}
 
 	/// Set the value of the bit at index `i`.
-	///
-	/// # Arguments
-	/// * `i` - The index of the element to modify
 	#[inline(always)]
 	pub fn set_inlined(&mut self, i: usize, value: bool) {
 		let (position, shift) = Self::pos_shift(i);
@@ -94,11 +79,8 @@ impl BitField {
 
 	/// Set the value of the bit at index `i`.
 	///
-	/// # Arguments
-	/// * `i` - The index of the element to modify
-	///
 	/// # Safety
-	/// Parameter `i` must be in range from 0 to \[capacity].
+	/// Parameter `i` must be in range from 0 to `capacity`.
 	#[inline(always)]
 	pub unsafe fn set_inlined_unchecked(&mut self, i: usize, value: bool) {
 		let (position, shift) = Self::pos_shift(i);
@@ -119,11 +101,8 @@ impl BitField {
 
 	/// Atomically set the value of the bit at index `i`.
 	///
-	/// # Arguments
-	/// * `i` - The index of the element to modify
-	///
 	/// # Safety
-	/// Parameter `i` must be in range from 0 to \[capacity].
+	/// Parameter `i` must be in range from 0 to `capacity`.
 	#[inline(always)]
 	pub unsafe fn set_inlined_unchecked_atomic(&mut self, i: usize, value: bool) {
 		let (position, shift) = Self::pos_shift(i);
@@ -146,11 +125,8 @@ impl BitField {
 
 	/// Set the value of the bits at the specified indices.
 	///
-	/// # Arguments
-	/// * `indices` - The indices of the element to modify
-	///
 	/// # Safety
-	/// All indices must be in range from 0 to \[capacity].
+	/// All indices must be in range from 0 to `capacity`.
 	pub unsafe fn set_batch_unchecked<const VALUE: bool>(&mut self, indices: &[usize]) {
 		for i in indices {
 			self.set_inlined_unchecked(*i, VALUE);
@@ -158,9 +134,6 @@ impl BitField {
 	}
 
 	/// Check if the [BitField] is a subset of another [BitField].
-	///
-	/// # Arguments
-	/// * `other` - The bitfield to check against
 	pub fn is_subset_of(&self, other: &BitField) -> bool {
 		if self.values.is_empty() || other.values.is_empty() {
 			return false;
@@ -173,9 +146,7 @@ impl BitField {
 		self.values.fill(0);
 	}
 
-	/// Set the minimum capacity of the [BitField].
-	/// # Arguments
-	/// * `capacity` - A usize representing the container's minimum capacity in bits
+	/// Set the minimum capacity of the [BitField] in bits.
 	pub fn ensure_capacity(&mut self, capacity: usize) {
 		if self.values.len() * BITS < capacity {
 			let mut count = capacity / BITS;
@@ -198,10 +169,7 @@ impl BitField {
 		BitFieldRangeIterator::new(&self.values)
 	}
 
-	/// Reserve an additional \[count] bits.
-	///
-	/// # Arguments
-	/// * `count` - The minimum number of additional bits to reserve
+	/// Reserve an additional `count` bits (minimum).
 	pub fn reserve(&mut self, count: usize) {
 		let mut new = count / BITS;
 		if new * BITS < count {

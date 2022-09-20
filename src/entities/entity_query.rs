@@ -1,4 +1,4 @@
-use crate::components::{ComponentSet};
+use crate::components::{Component, ComponentSet};
 use crate::data_structures::BitField;
 use std::hash::BuildHasherDefault;
 use nohash_hasher::NoHashHasher;
@@ -25,6 +25,7 @@ pub struct EntityQuery {
 }
 
 impl EntityQuery {
+	/// Create a new [QueryBuilder]
 	pub fn build() -> QueryBuilder {
 		QueryBuilder::default()
 	}
@@ -60,11 +61,24 @@ impl<I: 'static + ComponentSet, E: 'static + ComponentSet> QueryBuilder<I, E> {
 	}
 }
 
-/// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
-/// It provides a unified way to create an [EntityQuery] from a set of [Component] types through their base type and all derived ref types.
+/// It provides a unified way to create an [EntityQuery](crate::entities::EntityQuery)
+/// from a set of [Component](crate::components::Component) types through their base type and all derived ref types.
+#[allow(missing_docs)]
 pub trait ComponentQuery {
 	type Arguments;
 	fn get_query() -> EntityQuery;
+}
+
+impl<T: Component> ComponentQuery for T
+where
+	(T, ()): ComponentQuery,
+{
+	type Arguments = <(T, ()) as ComponentQuery>::Arguments;
+
+	#[inline(always)]
+	fn get_query() -> EntityQuery {
+		<(T, ()) as ComponentQuery>::get_query()
+	}
 }
 
 impl<I: 'static + ComponentSet, E: 'static + ComponentSet> ComponentQuery for (I, E) {

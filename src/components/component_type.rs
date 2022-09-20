@@ -1,13 +1,15 @@
-use crate::components::component_id::HasComponentId;
 use crate::data_structures::{AnyBuffer, BitField};
 use crate::components::ComponentId;
 use std::hash::{Hash, Hasher};
 use std::any::TypeId;
 
+/// A piece of data associated with an Entity.
 pub trait Component
 where
-	Self: Default,
+	Self: 'static + Default,
 {
+	/// Retrieves the [Component] type's unique runtime identifier.
+	fn component_id() -> ComponentId;
 }
 
 /// A runtime representation of a type implementing the [`Component`] trait.
@@ -19,8 +21,8 @@ pub struct ComponentType {
 }
 
 impl ComponentType {
-	/// Returns the [`ComponentType`] of T.
-	pub fn of<T: 'static + Default + Component + HasComponentId>() -> Self {
+	/// Retrieves the [ComponentType] of `T`
+	pub fn of<T: Component>() -> Self {
 		Self {
 			id: ComponentId::of::<T>(),
 			type_id: TypeId::of::<T>(),
@@ -28,10 +30,12 @@ impl ComponentType {
 		}
 	}
 
+	/// Retrieves the [ComponentType]'s unique runtime identifier.
 	pub const fn id(&self) -> ComponentId {
 		self.id
 	}
 
+	/// Retrieves the [ComponentType]'s unique compiletime identifier.
 	pub const fn type_id(&self) -> TypeId {
 		self.type_id
 	}
@@ -55,10 +59,15 @@ impl Hash for ComponentType {
 	}
 }
 
-/// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
-/// It provides a unified way to access a component's id and type through its base type and all derived ref types.
+/// It provides a unified way to access a component's [ComponentId] and type
+/// through its base type and all derived ref types.
+///
+/// This trait should only be implemented by #\[derive([`Component`])].
 pub trait ComponentTypeInfo {
+	/// The underlying [Component]'s type
 	type ComponentType: ComponentTypeInfo;
+
+	/// Retrieves the [Component] type's unique runtime identifier.
 	fn component_id() -> ComponentId;
 }
 
@@ -78,6 +87,7 @@ impl<T: ComponentTypeInfo> ComponentTypeInfo for &mut T {
 
 pub(crate) trait ComponentFrom<T> {
 	/// # Safety
+	/// Always safe if called by IterArchetype.
 	/// IterArchetype's implementation guarantees Rust's aliasing rules are maintained.
 	unsafe fn convert(value: T) -> Self;
 }

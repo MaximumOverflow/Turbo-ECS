@@ -1,4 +1,3 @@
-use crate::archetypes::ArchetypeStore;
 use crate::entities::EntityRegistry;
 use std::collections::HashSet;
 use crate::systems::System;
@@ -43,11 +42,11 @@ impl SystemRegistry {
 		}
 	}
 
-	pub fn setup_systems(&mut self, archetypes: &mut ArchetypeStore) {
+	pub fn setup_systems(&mut self) {
 		match self.state {
 			State::Uninitialized => {
 				self.state = State::Initializing;
-				self.systems.iter_mut().for_each(|s| s.setup(archetypes));
+				self.systems.iter_mut().for_each(|s| s.setup());
 				self.state = State::Initialized;
 			},
 			State::Initializing => {

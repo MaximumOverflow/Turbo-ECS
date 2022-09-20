@@ -10,16 +10,14 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
 
     let gen = quote! {
         turbo_ecs::lazy_static! {
-            static ref #id_name: turbo_ecs::components::ComponentId = unsafe {
+            static ref #id_name: turbo_ecs::components::component_id::ComponentId = unsafe {
                 turbo_ecs::components::component_id::get_next()
             };
         }
 
-        impl turbo_ecs::components::Component for #name {}
-
-        impl turbo_ecs::components::component_id::HasComponentId for #name {
+        impl turbo_ecs::components::Component for #name {
             #[inline(always)]
-            fn component_id() -> turbo_ecs::components::ComponentId {
+            fn component_id() -> turbo_ecs::components::component_id::ComponentId {
                 *#id_name
             }
         }
@@ -28,17 +26,8 @@ pub fn impl_component(ast: &DeriveInput) -> TokenStream {
             type ComponentType = #name;
 
             #[inline(always)]
-            fn component_id() -> turbo_ecs::components::ComponentId {
-                turbo_ecs::components::ComponentId::of::<#name>()
-            }
-        }
-
-        impl turbo_ecs::entities::ComponentQuery for #name {
-            type Arguments = <(#name, ()) as turbo_ecs::entities::ComponentQuery>::Arguments;
-
-            #[inline(always)]
-            fn get_query() -> turbo_ecs::entities::EntityQuery {
-                <(#name, ()) as turbo_ecs::entities::ComponentQuery>::get_query()
+            fn component_id() -> turbo_ecs::components::component_id::ComponentId {
+                turbo_ecs::components::component_id::ComponentId::of::<#name>()
             }
         }
     };

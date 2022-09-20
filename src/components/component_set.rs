@@ -20,10 +20,10 @@ lazy_static! {
 	static ref TYPE_TO_BITFIELD: Mutex<TBFMap> = Mutex::new(HashMap::default());
 }
 
-/// This trait should only be implemented by #\[derive([`Component`])] for use by IterArchetype.
-/// It provides a unified way to create a [BitField] from a set of [Component] types through their base type and all derived ref types.
+/// It provides a unified way to create a [BitField](crate::data_structures::BitField) from a set of
+/// [Component](crate::components::Component) types through their base type and all derived ref types.
 pub trait ComponentSet {
-	/// Extract a bitfield from a set of [ComponentIds](ComponentId)
+	/// Extract a bitfield from a set of [ComponentIds](crate::components::ComponentId)
 	fn get_bitfield() -> (Arc<BitField>, bool);
 }
 

@@ -18,10 +18,7 @@ impl RangeAllocator {
 		Self::default()
 	}
 
-	/// Create a new [RangeAllocator] with the specified capacity.
-	///
-	/// # Arguments
-	/// * `capacity` - A usize representing the container's target capacity
+	/// Create a new [RangeAllocator] with the specified `capacity`.
 	pub fn with_capacity(capacity: usize) -> Self {
 		if capacity == 0 {
 			Self::default()
@@ -34,10 +31,7 @@ impl RangeAllocator {
 		}
 	}
 
-	/// Allocate a continuous chunk of size \[size].
-	///
-	/// # Arguments
-	/// * `size` - The size of the chunk to allocate
+	/// Allocate a continuous chunk of size `size`.
 	pub fn allocate(&mut self, size: usize) -> Range {
 		match self.try_allocate(size) {
 			Ok(range) => range,
@@ -45,11 +39,8 @@ impl RangeAllocator {
 		}
 	}
 
-	/// Conditionally allocate a continuous chunk of size \[size].
+	/// Conditionally allocate a continuous chunk of size `size`.
 	/// The function returns None if there are no available chunks to allocate into.
-	///
-	/// # Arguments
-	/// * `size` - The size of the chunk to allocate
 	pub fn try_allocate(&mut self, size: usize) -> Result<Range, usize> {
 		let find = self.ranges.iter().find_map(|(k, r)| if r.len() >= size { Some(k) } else { None });
 
@@ -72,11 +63,9 @@ impl RangeAllocator {
 		}
 	}
 
-	/// Allocate multiple chunks adding up to a size of \[size].
+	/// Allocate multiple chunks adding up to a size of `size`.
 	///
-	/// # Arguments
-	/// * `size` - The total amount of space to allocate
-	/// * `ranges` - The allocated ranges will be outputted here
+	/// The resulting chunks will be placed into `ranges`.
 	pub fn allocate_fragmented(&mut self, size: usize, ranges: &mut Vec<Range>) {
 		let mut remaining = size;
 
@@ -126,13 +115,11 @@ impl RangeAllocator {
 		}
 	}
 
-	/// Conditionally allocate multiple chunks adding up to a size of \[size].
+	/// Conditionally allocate multiple chunks adding up to a size of `size`.
 	/// The function will return the amount of additional space required for a successful allocation
 	/// if there's not enough space available.
 	///
-	/// # Arguments
-	/// * `size` - The total amount of space to allocate
-	/// * `ranges` - The allocated ranges will be outputted here
+	/// The resulting chunks will be placed into `ranges`.
 	pub fn try_allocate_fragmented(&mut self, size: usize, ranges: &mut Vec<Range>) -> Result<(), usize> {
 		ranges.clear();
 		if self.available() < size {
@@ -144,9 +131,7 @@ impl RangeAllocator {
 	}
 
 	/// Return a range to the allocator.
-	///
-	/// # Arguments
-	/// * `range` - The range to be returned to the allocator. Ranges should never be returned twice.
+	/// **Ranges should never be returned twice**.
 	//noinspection DuplicatedCode
 	pub fn free(&mut self, range: Range) {
 		if range.is_empty() {
@@ -217,8 +202,6 @@ impl RangeAllocator {
 	}
 
 	/// Set the minimum capacity of the allocator.
-	/// # Arguments
-	/// * `capacity` - A usize representing the allocator's minimum capacity
 	pub fn ensure_capacity(&mut self, capacity: usize) {
 		if capacity > self.capacity {
 			let count = capacity - self.capacity;
@@ -226,9 +209,7 @@ impl RangeAllocator {
 		}
 	}
 
-	/// Reserve an additional chunk of size \[size].
-	/// # Arguments
-	/// * `size` - The size of the chunk to reserve
+	/// Reserve an additional chunk of size `size`.
 	pub fn reserve(&mut self, size: usize) {
 		let start = self.capacity;
 		self.capacity += size;
