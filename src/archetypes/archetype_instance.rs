@@ -17,8 +17,9 @@ pub struct Archetype {
 
 pub struct ArchetypeInstance {
 	bitfield: BitField,
-	components: BitField,
 	allocator: RangeAllocator,
+	component_bitfield: BitField,
+	components: Vec<ComponentType>,
 	buffers: HashMap<TypeId, AnyBuffer, Hasher>,
 }
 
@@ -49,7 +50,25 @@ impl ArchetypeInstance {
 			buffers,
 			bitfield,
 			allocator,
-			components: component_bitfield,
+			component_bitfield,
+			components: components.into(),
+		}
+	}
+
+	/// Allocate \[count] slots, setting all components to their default value.
+	/// The returned slot chunks might be fragmented.
+	///
+	/// # Arguments
+	/// * `count` - The amount of slots to allocate
+	/// * `ranges` - The allocated chunks will be pushed here
+	pub fn take_slots(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
+		self.take_slots_no_init(count, ranges);
+		for buffer in self.buffers.values_mut() {
+			for range in ranges.iter() {
+				unsafe {
+					buffer.default_values(range.clone());
+				}
+			}
 		}
 	}
 
@@ -59,7 +78,7 @@ impl ArchetypeInstance {
 	/// # Arguments
 	/// * `count` - The amount of slots to allocate
 	/// * `ranges` - The allocated chunks will be pushed here
-	pub fn take_slots(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
+	pub fn take_slots_no_init(&mut self, count: usize, ranges: &mut Vec<Range<usize>>) {
 		ranges.clear();
 		match self.allocator.try_allocate_fragmented(count, ranges) {
 			Ok(_) => {},
@@ -71,27 +90,13 @@ impl ArchetypeInstance {
 				self.bitfield.ensure_capacity(self.allocator.capacity());
 			},
 		};
-
-		for buffer in self.buffers.values_mut() {
-			for range in ranges.iter() {
-				unsafe {
-					buffer.default_values(range.clone());
-				}
-			}
-		}
 	}
 
-	/// Return a set of slots to the pool.
-	/// Repeated values are allowed.
-	///
-	/// # Arguments
-	/// * `slots` - The slots to return to the allocator
-	///
 	/// # Safety
-	/// All slots must be within range from 0 to \[capacity]
+	/// All slots must be within range from 0 to `capacity`.
+	/// Repeated values are allowed.
 	pub unsafe fn return_slots(&mut self, slots: &[usize]) {
 		self.bitfield.clear();
-
 		self.bitfield.set_batch_unchecked::<true>(slots);
 		for range in self.bitfield.iter_ranges() {
 			for buffer in self.buffers.values_mut() {
@@ -101,8 +106,19 @@ impl ArchetypeInstance {
 		}
 	}
 
+	/// # Safety
+	/// All slots must be within range from 0 to `capacity`.
+	/// Repeated values are allowed.
+	pub unsafe fn return_slots_no_drop(&mut self, slots: &[usize]) {
+		self.bitfield.clear();
+		self.bitfield.set_batch_unchecked::<true>(slots);
+		for range in self.bitfield.iter_ranges() {
+			self.allocator.free(range);
+		}
+	}
+
 	pub fn matches_query(&self, set: &BitField) -> bool {
-		set.is_subset_of(&self.components)
+		set.is_subset_of(&self.component_bitfield)
 	}
 
 	pub fn ensure_capacity(&mut self, capacity: usize) {
@@ -135,8 +151,21 @@ impl ArchetypeInstance {
 		self.allocator.used_ranges()
 	}
 
-	pub fn components(&self) -> &BitField {
+	pub fn components(&self) -> &[ComponentType] {
 		&self.components
+	}
+
+	pub fn component_bitfield(&self) -> &BitField {
+		&self.component_bitfield
+	}
+
+	pub unsafe fn copy_components(&self, dst: &mut ArchetypeInstance, src_idx: usize, dst_idx: usize) {
+		for (key, src) in self.buffers.iter() {
+			if let Some(dst) = dst.buffers.get_mut(key) {
+				dst.drop_values(dst_idx..dst_idx + 1);
+				src.copy_values(dst, src_idx..src_idx + 1, dst_idx);
+			}
+		}
 	}
 }
 

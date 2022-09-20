@@ -99,10 +99,12 @@ impl AnyBuffer {
 
 	/// # Safety
 	/// - The two buffers must contain the same type.
+	/// - All previously initialized values must be dropped first.
+	///   Failure to do so may result in memory leaks and/or other unintended behaviour.
 	/// - `range` must be within the bounds of the buffer.
 	/// - `det_offset` must be within the bounds of the destination buffer.
 	/// - `range.len() + dst_offset` must be within the bounds of the destination buffer.
-	pub unsafe fn copy_values(&mut self, dst: &mut Self, range: Range<usize>, dst_offset: usize) {
+	pub unsafe fn copy_values(&self, dst: &mut Self, range: Range<usize>, dst_offset: usize) {
 		debug_assert!(self.type_id == dst.type_id);
 
 		debug_assert!(range.start < self.capacity());
@@ -111,7 +113,7 @@ impl AnyBuffer {
 		debug_assert!(dst_offset < dst.capacity());
 		debug_assert!(range.len() <= dst.capacity() - dst_offset);
 
-		let src = self.buffer.as_mut_ptr().add(range.start * self.type_size);
+		let src = self.buffer.as_ptr().add(range.start * self.type_size);
 		let dst = dst.buffer.as_mut_ptr().add(dst_offset * self.type_size);
 		std::ptr::copy_nonoverlapping(src, dst, range.len() * self.type_size);
 	}

@@ -67,7 +67,7 @@ impl ArchetypeStore {
 	}
 
 	pub(crate) fn query(&mut self, query: EntityQuery) -> impl Iterator<Item = &mut ArchetypeInstance> {
-		if self.queries.get(&query).is_none() {
+		if !self.queries.contains_key(&query) {
 			self.init_query(query);
 		}
 

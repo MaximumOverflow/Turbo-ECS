@@ -1,8 +1,8 @@
 use crate::archetypes::{Archetype, ArchetypeInstance, ArchetypeStore, IterateArchetype, IterateArchetypeParallel};
 use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
+use crate::components::{Component, ComponentSet, ComponentType};
 use crate::data_structures::{BitField, Pool, RangeAllocator};
 use crate::components::component_id::HasComponentId;
-use crate::components::{Component, ComponentSet};
 use std::ops::{DerefMut, Range};
 use std::marker::PhantomData;
 use std::iter::repeat_with;
@@ -150,7 +150,7 @@ impl EntityRegistry {
 		}
 	}
 
-	/// Gets a reference to a [`components`](Component) bound to a specific [`entity`](Entity).
+	/// Gets a reference to a [`component`](Component) bound to a specific [`entity`](Entity).
 	pub fn get_component<T: 'static + Component + HasComponentId>(&self, entity: &Entity) -> Option<&T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
@@ -160,7 +160,7 @@ impl EntityRegistry {
 		unsafe { Some(&*(component as *const T)) }
 	}
 
-	/// Gets a mutable reference to a [`components`](Component) bound to a specific [`entity`](Entity).
+	/// Gets a mutable reference to a [`component`](Component) bound to a specific [`entity`](Entity).
 	pub fn get_component_mut<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity) -> Option<&mut T> {
 		let instance = &self.instances[entity.index as usize];
 		assert_entity(entity, instance);
@@ -168,6 +168,62 @@ impl EntityRegistry {
 		let archetype = self.archetype_store.get_mut(instance.archetype as usize);
 		let component = archetype.get_component_mut::<T>(instance.slot as usize)?;
 		unsafe { Some(&mut *(component as *mut T)) }
+	}
+
+	pub fn add_component_data<T: 'static + Component + HasComponentId>(&mut self, entity: &Entity, value: T) -> bool {
+		let instance = &mut self.instances[entity.index as usize];
+		assert_entity(entity, instance);
+
+		let (src, dst) = {
+			let dst_archetype_id = {
+				let src_archetype = self.archetype_store.get(instance.archetype as usize);
+				if src_archetype.component_bitfield().get(T::component_id().value()) {
+					return false;
+				}
+
+				let mut components = Vec::from(src_archetype.components());
+
+				components.push(ComponentType::of::<T>());
+				self.archetype_store.create_archetype(&components)
+			};
+
+			// SAFETY: Always safe.
+			// The two ArchetypeInstance references cannot overlap.
+			unsafe {
+				let dst_archetype = self.archetype_store.get_mut(dst_archetype_id.index);
+				let dst_archetype = &mut *(dst_archetype as *mut ArchetypeInstance);
+
+				let src_archetype = self.archetype_store.get_mut(instance.archetype as usize);
+				let src_archetype = &mut *(src_archetype as *mut ArchetypeInstance);
+
+				instance.archetype = dst_archetype_id.index as u16;
+				(src_archetype, dst_archetype)
+			}
+		};
+
+		let src_slot = instance.slot as usize;
+
+		let dst_slot = {
+			let mut slots = self.range_vec_pool.take_one();
+			dst.take_slots_no_init(1, &mut slots);
+
+			let slot = slots[0].start;
+			instance.slot = slot as u32;
+			slot
+		};
+
+		// SAFETY: Always safe.
+		// Ownership of all components is transferred to the destination archetype, so we don't call drop on them.
+		// The component data in the source archetype can be safely overwritten by subsequent allocations.
+		// All components in the destination archetype will have already been dropped by a previous deallocation,
+		// so they can be safely overwritten too.
+		unsafe {
+			src.copy_components(dst, src_slot, dst_slot);
+			src.return_slots_no_drop(std::slice::from_ref(&src_slot));
+			std::ptr::write(dst.get_component_mut(dst_slot).unwrap(), value);
+		}
+
+		true
 	}
 
 	#[inline(always)]

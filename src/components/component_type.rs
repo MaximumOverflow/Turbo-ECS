@@ -85,14 +85,14 @@ pub(crate) trait ComponentFrom<T> {
 impl<T: Component + Copy> ComponentFrom<*const T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *const T) -> Self {
-		(*value).clone()
+		*value
 	}
 }
 
 impl<T: Component + Copy> ComponentFrom<*mut T> for T {
 	#[inline(always)]
 	unsafe fn convert(value: *mut T) -> Self {
-		(*value).clone()
+		*value
 	}
 }
 
