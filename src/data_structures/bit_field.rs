@@ -59,7 +59,7 @@ impl BitField {
 	pub unsafe fn get_inlined_unchecked(&self, i: usize) -> bool {
 		debug_assert!(i < self.capacity(), "Index out of bounds");
 		let (position, shift) = Self::pos_shift(i);
-		let bit_value = self.values.get_unchecked(position) ;
+		let bit_value = self.values.get_unchecked(position);
 		let bit = FIRST_BIT >> shift;
 		(bit_value & bit as u32) != 0
 	}

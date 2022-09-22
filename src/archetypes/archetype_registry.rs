@@ -195,7 +195,7 @@ impl Eq for ArchetypeTransition {}
 
 impl PartialEq<Self> for ArchetypeTransition {
 	fn eq(&self, other: &Self) -> bool {
-		(self.component == other.component) | (self.archetype == other.archetype) | (self.kind == other.kind)
+		(self.component == other.component) & (self.archetype == other.archetype) & (self.kind == other.kind)
 	}
 }
 

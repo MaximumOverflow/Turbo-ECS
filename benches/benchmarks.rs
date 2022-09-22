@@ -19,7 +19,6 @@ struct Velocity(Vec3);
 
 fn create_entities(c: &mut Criterion) {
     c.bench_function("Create entities", |b| {
-        let mut entities = vec![Entity::default(); COUNT];
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
@@ -27,7 +26,9 @@ fn create_entities(c: &mut Criterion) {
                     create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
                 (ecs, archetype)
             },
-            |(mut ecs, archetype)| ecs.create_entities_from_archetype(archetype, &mut entities),
+            |(mut ecs, archetype)| {
+                let _ = ecs.create_entities_from_archetype(archetype, COUNT);
+            },
             BatchSize::PerIteration,
         );
     });
@@ -38,10 +39,11 @@ fn destroy_entities(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut ecs = EcsContext::new();
-                let mut entities = vec![Entity::default(); COUNT];
                 let archetype =
                     create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-                ecs.create_entities_from_archetype(archetype, &mut entities);
+                let entities: Vec<_> = ecs
+                    .create_entities_from_archetype(archetype, COUNT)
+                    .collect();
                 (ecs, entities)
             },
             |(mut ecs, entities)| ecs.destroy_entities(&entities),
@@ -54,9 +56,8 @@ fn iterate_entities(c: &mut Criterion) {
     let mut group = c.benchmark_group("Iterate entities");
     group.bench_function("Single-threaded", |b| {
         let mut ecs = EcsContext::new();
-        let mut entities = vec![Entity::default(); COUNT];
         let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-        ecs.create_entities_from_archetype(archetype, &mut entities);
+        let _ = ecs.create_entities_from_archetype(archetype, COUNT);
 
         b.iter(|| {
             ecs.filter()
@@ -70,9 +71,8 @@ fn iterate_entities(c: &mut Criterion) {
 
     group.bench_function("Multi-threaded", |b| {
         let mut ecs = EcsContext::new();
-        let mut entities = vec![Entity::default(); COUNT];
         let archetype = create_archetype!(ecs, [Transform, Translation, Rotation, Velocity]);
-        ecs.create_entities_from_archetype(archetype, &mut entities);
+        let _ = ecs.create_entities_from_archetype(archetype, COUNT);
 
         b.iter(|| {
             ecs.filter()

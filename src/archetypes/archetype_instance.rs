@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::any::TypeId;
 use std::ops::Range;
 use paste::paste;
+use crate::entities::Entity;
 
 type Hasher = BuildHasherDefault<NoHashHasher<u64>>;
 
@@ -19,6 +20,7 @@ pub struct Archetype {
 pub struct ArchetypeInstance {
 	id: Archetype,
 	bitfield: BitField,
+	entities: Vec<Entity>,
 	allocator: RangeAllocator,
 	component_bitfield: BitField,
 	components: Vec<ComponentType>,
@@ -32,6 +34,7 @@ impl ArchetypeInstance {
 
 	pub fn with_capacity(id: Archetype, components: &[ComponentType], capacity: usize) -> Self {
 		let mut component_bitfield = BitField::new();
+		let entities = Vec::with_capacity(capacity);
 		let bitfield = BitField::with_capacity(capacity);
 		let allocator = RangeAllocator::with_capacity(capacity);
 
@@ -52,6 +55,7 @@ impl ArchetypeInstance {
 			id,
 			buffers,
 			bitfield,
+			entities,
 			allocator,
 			component_bitfield,
 			components: components.into(),
@@ -77,10 +81,14 @@ impl ArchetypeInstance {
 		ranges.clear();
 		match self.allocator.try_allocate_fragmented(count, ranges) {
 			Ok(_) => {},
-			Err(needed) => {
+			Err(needed) => unsafe {
 				for buffer in self.buffers.values_mut() {
 					buffer.ensure_capacity(self.allocator.capacity() + needed);
 				}
+
+				self.entities.reserve(needed);
+				self.entities.set_len(needed);
+
 				self.allocator.allocate_fragmented(count, ranges);
 				self.bitfield.ensure_capacity(self.allocator.capacity());
 			},
@@ -157,7 +165,7 @@ impl ArchetypeInstance {
 		unsafe {
 			let buffer = self.buffers.get_mut(&TypeId::of::<T>())?;
 			let vec = buffer.as_mut_slice_unchecked::<T>();
-			
+
 			debug_assert!(slot < vec.len());
 			Some(vec.get_unchecked_mut(slot))
 		}
@@ -173,6 +181,10 @@ impl ArchetypeInstance {
 
 	pub fn component_bitfield(&self) -> &BitField {
 		&self.component_bitfield
+	}
+
+	pub fn entities_mut(&mut self) -> &mut [Entity] {
+		&mut self.entities
 	}
 
 	pub unsafe fn copy_components(&self, dst: &mut ArchetypeInstance, src_idx: usize, dst_idx: usize) {
@@ -205,15 +217,23 @@ impl Drop for ArchetypeInstance {
 }
 
 pub trait IterArchetype<T> {
-	fn for_each_mut(&mut self, func: &mut impl FnMut(T));
+	fn for_each(&mut self, func: &mut impl FnMut(T));
+	fn entities_for_each(&mut self, func: &mut impl FnMut(Entity, T));
 }
 
 pub trait IterArchetypeParallel<T> {
-	fn for_each_mut(&mut self, func: &(impl Fn(T) + Send + Sync));
+	fn for_each(&mut self, func: &(impl Fn(T) + Send + Sync));
+	fn entities_for_each(&mut self, func: &(impl Fn(Entity, T) + Send + Sync));
 }
 
 impl IterArchetype<()> for ArchetypeInstance {
-	fn for_each_mut(&mut self, _: &mut impl FnMut(())) {}
+	fn for_each(&mut self, _: &mut impl FnMut(())) {}
+
+	fn entities_for_each(&mut self, func: &mut impl FnMut(Entity, ())) {
+		for entity in self.entities.iter().cloned() {
+			func(entity, ())
+		}
+	}
 }
 
 macro_rules! impl_archetype_iter {
@@ -223,7 +243,7 @@ macro_rules! impl_archetype_iter {
             impl <$($t: ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType>),*> IterArchetype<($($t),*)> for ArchetypeInstance
 				where $($t::ComponentType: 'static),*
 			{
-                fn for_each_mut(&mut self, func: &mut impl FnMut(($($t),*))) {
+                fn for_each(&mut self, func: &mut impl FnMut(($($t),*))) {
                     unsafe {
                         $(
                             let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
@@ -237,13 +257,32 @@ macro_rules! impl_archetype_iter {
                         }
                     }
                 }
+
+				fn entities_for_each(&mut self, func: &mut impl FnMut(Entity, ($($t),*))) {
+                    unsafe {
+                        $(
+                            let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
+                            let [<$t:lower>] = [<$t:lower>].as_mut_slice_unchecked::<$t::ComponentType>().as_mut_ptr();
+                        )*
+
+						let entities = self.entities.as_ptr();
+
+                        for range in self.allocator.used_ranges() {
+                            for i in range {
+                                $(let [<$t:lower>] = [<$t:lower>].add(i);)*
+								let entity = (*entities.add(i)).clone();
+                                func(entity, ($($t::convert([<$t:lower>])),*));
+                            }
+                        }
+                    }
+                }
             }
 
 			#[allow(unused_parens)]
 			impl<$($t: ComponentTypeInfo + ComponentFrom<*mut $t::ComponentType> + Send + Sync),*> IterArchetypeParallel<($($t),*)> for ArchetypeInstance
 				where $($t::ComponentType: 'static),*
 			{
-				fn for_each_mut(&mut self, func: &(impl Fn(($($t),*)) + Sync + Send)) {
+				fn for_each(&mut self, func: &(impl Fn(($($t),*)) + Sync + Send)) {
 					unsafe {
 						$(
                             let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
@@ -254,6 +293,24 @@ macro_rules! impl_archetype_iter {
 						ranges.into_par_iter().flatten().for_each(|i| {
 							$(let [<$t:lower>] = ([<$t:lower>] as *mut $t::ComponentType).add(i);)*
 							func(($($t::convert([<$t:lower>])),*));
+						});
+					}
+				}
+
+				fn entities_for_each(&mut self, func: &(impl Fn(Entity, ($($t),*)) + Sync + Send)) {
+					unsafe {
+						$(
+                            let [<$t:lower>] = self.buffers.get_mut(&TypeId::of::<$t::ComponentType>()).unwrap();
+                            let [<$t:lower>] = [<$t:lower>].as_mut_slice_unchecked::<$t::ComponentType>().as_mut_ptr() as usize;
+                        )*
+
+						let entities = self.entities.as_ptr() as usize;
+
+						let ranges: Vec<_> = self.allocator.used_ranges().collect();
+						ranges.into_par_iter().flatten().for_each(|i| {
+							$(let [<$t:lower>] = ([<$t:lower>] as *mut $t::ComponentType).add(i);)*
+							let entity = (*(entities as *const Entity).add(i)).clone();
+							func(entity, ($($t::convert([<$t:lower>])),*));
 						});
 					}
 				}

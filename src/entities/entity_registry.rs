@@ -1,18 +1,24 @@
-use crate::entities::{assert_entity, ComponentQuery, Entity, EntityInstance};
 use crate::archetypes::{
 	Archetype, ArchetypeInstance, ArchetypeStore, ArchetypeTransition, ArchetypeTransitionKind, IterArchetype,
 	IterArchetypeParallel,
 };
 use crate::components::{Component, ComponentSet, ComponentType};
-use crate::data_structures::{BitField, Pool, RangeAllocator};
-use std::ops::{DerefMut, Range};
+use crate::entities::{ComponentQuery, Entity, EntityInstance};
+use crate::data_structures::{BitField, Pool};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::marker::PhantomData;
-use std::iter::repeat_with;
+use std::alloc::Layout;
+use std::ops::Range;
+
+static mut NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
 /// A container for [Entities](crate::entities::Entity) and their associated [Components](crate::components::Component).
 pub struct EntityRegistry {
-	allocator: RangeAllocator,
-	instances: Vec<EntityInstance>,
+	id: u32,
+	capacity: usize,
+	instance_buffers: Vec<Box<[EntityInstance]>>,
+	available_instances: Vec<*mut EntityInstance>,
+
 	pub(crate) archetype_store: ArchetypeStore,
 
 	bitfield: BitField,
@@ -23,8 +29,11 @@ pub struct EntityRegistry {
 impl EntityRegistry {
 	pub(crate) fn new() -> Self {
 		Self {
-			instances: vec![],
-			allocator: RangeAllocator::new(),
+			id: unsafe { NEXT_ID.fetch_and(1, Ordering::Relaxed) },
+
+			capacity: 0,
+			instance_buffers: vec![],
+			available_instances: vec![],
 			archetype_store: ArchetypeStore::new(),
 
 			bitfield: BitField::new(),
@@ -41,26 +50,26 @@ impl EntityRegistry {
 	/// Creates a single [entity](Entity) belonging to the specified [archetype](Archetype).
 	#[inline(never)]
 	pub fn create_entity_from_archetype(&mut self, archetype: Archetype) -> Entity {
-		let index = match self.allocator.try_allocate(1) {
-			Ok(index) => index.start,
-			Err(_) => {
-				let capacity = usize::max(1, self.allocator.capacity());
-				self.reserve_entity_space(capacity);
-				self.allocator.allocate(1).start
+		let instance = match self.available_instances.pop() {
+			None => unsafe {
+				self.new_instance_buffer(usize::max(16, self.capacity));
+				&mut *self.available_instances.pop().unwrap()
 			},
+
+			Some(instance) => unsafe { &mut *instance },
 		};
 
-		let instance = &mut self.instances[index];
 		let mut slot_ranges = self.range_vec_pool.take_one();
 
 		let archetype_instance = self.archetype_store.get_mut(archetype.index as usize);
 		archetype_instance.take_slots(1, &mut slot_ranges);
 
-		instance.slot = slot_ranges[0].start as u32;
-		instance.archetype = archetype.index as u16;
+		instance.slot = slot_ranges[0].start;
+		instance.archetype = archetype.index;
 
 		Entity {
-			index: index as u32,
+			instance,
+			registry_id: self.id,
 			version: instance.version,
 		}
 	}
@@ -68,38 +77,53 @@ impl EntityRegistry {
 	/// Creates a series of [entities](Entity) belonging to the specified [archetype](Archetype).  
 	/// The new [entities](Entity) will be written into the provided slice.
 	#[inline(never)]
-	pub fn create_entities_from_archetype(&mut self, archetype: Archetype, entities: &mut [Entity]) {
-		let count = entities.len();
-		let mut slot_ranges = self.range_vec_pool.take_one();
-		let mut instance_ranges = self.range_vec_pool.take_one();
-
-		match self.allocator.try_allocate_fragmented(count, &mut instance_ranges) {
-			Ok(_) => {},
-			Err(needed) => {
-				let target_capacity = usize::max(self.allocator.capacity() * 2, needed);
-				self.reserve_entity_space(target_capacity - self.allocator.capacity());
-				self.allocator.allocate_fragmented(count, &mut instance_ranges);
-			},
+	pub fn create_entities_from_archetype(
+		&mut self, archetype: Archetype, count: usize,
+	) -> impl Iterator<Item = Entity> + '_ {
+		if self.available_instances.len() < count {
+			let required = count - self.available_instances.len();
+			self.new_instance_buffer(usize::max(required, self.capacity));
 		}
 
-		let archetype_instance = self.archetype_store.get_mut(archetype.index);
-		archetype_instance.take_slots(count, &mut slot_ranges);
+		let context_id = self.id;
+		let archetype_id = archetype.index;
 
-		let entity_iter = 0..count;
-		let slot_iter = slot_ranges.iter().flat_map(|i| i.clone());
-		let instance_iter = instance_ranges.iter().flat_map(|i| i.clone());
+		let end = self.available_instances.len();
+		let start = self.available_instances.len() - count;
+		let instances = &mut self.available_instances.as_mut_slice()[start..];
 
-		let a = archetype.index as u16;
-		for ((i, e), s) in instance_iter.zip(entity_iter).zip(slot_iter) {
-			let instance = &mut self.instances[i];
-			let entity = &mut entities[e];
+		let mut slots = vec![];
+		let archetype = self.archetype_store.get_mut(archetype_id);
 
-			instance.archetype = a;
-			instance.slot = s as u32;
+		archetype.take_slots(count, &mut slots);
+		let archetype_entities = archetype.entities_mut();
 
-			entity.index = i as u32;
-			entity.version = instance.version;
+		unsafe {
+			let mut slots = slots.iter().cloned().flatten();
+
+			for i in 0..count {
+				let next = slots.next();
+				debug_assert_ne!(next, None);
+
+				let slot = next.unwrap_unchecked();
+				let instance = &mut *instances[i];
+
+				instance.slot = slot;
+				instance.archetype = archetype_id;
+
+				let entity = Entity {
+					instance,
+					registry_id: context_id,
+					version: instance.version,
+				};
+
+				archetype_entities[slot] = entity;
+			}
 		}
+
+		self.available_instances.drain(start..end);
+
+		slots.into_iter().flatten().map(|i| archetype_entities[i].clone())
 	}
 
 	/// Destroys the provided [entities](Entity).  
@@ -109,51 +133,44 @@ impl EntityRegistry {
 		unsafe {
 			self.bitfield.clear();
 			let mut slots = self.usize_vec_pool.take_one();
-			let slots = slots.deref_mut();
 
-			slots.set_len(0);
+			slots.clear();
 			if entities.len() > slots.capacity() {
-				slots.reserve(entities.len() - slots.capacity())
+				let reserve = entities.len() - slots.capacity();
+				slots.reserve(reserve)
 			}
 
 			let mut last_archetype = 0;
 			let archetypes = &mut self.archetype_store;
 
 			for entity in entities {
-				let index = entity.index as usize;
-				let instance = &mut self.instances[index];
-
-				assert_entity(entity, instance);
-				self.bitfield.set_inlined_unchecked(index, true);
+				let mut entity = entity.clone();
+				let instance = entity.get_instance_mut(self.id);
 
 				let archetype = instance.archetype;
 				if (archetype != last_archetype) & !slots.is_empty() {
-					archetypes.get_mut(last_archetype as usize).return_slots(slots);
-					slots.set_len(0);
+					archetypes.get_mut(last_archetype).return_slots(&slots);
+					self.bitfield.clear();
+					slots.clear()
 				}
 
-				last_archetype = archetype;
-				slots.push(instance.slot as usize);
+				if !self.bitfield.get_inlined_unchecked(instance.slot) {
+					instance.version += 1;
+					last_archetype = archetype;
+					slots.push(instance.slot as usize);
+					self.bitfield.set_inlined_unchecked(instance.slot, true);
+				}
 			}
 
 			if !slots.is_empty() {
-				archetypes.get_mut(last_archetype as usize).return_slots(slots);
-			}
-
-			for range in self.bitfield.iter_ranges() {
-				for i in range.clone() {
-					self.instances[i].version += 1;
-				}
-				self.allocator.free(range);
+				archetypes.get_mut(last_archetype as usize).return_slots(&slots);
 			}
 		}
 	}
 
 	/// Gets a reference to a [component](Component) bound to a specific [entity](Entity).
 	pub fn get_component<T: Component>(&self, entity: &Entity) -> Option<&T> {
-		let instance = &self.instances[entity.index as usize];
-		assert_entity(entity, instance);
-
+		let instance = entity.get_instance(self.id);
 		let archetype = self.archetype_store.get(instance.archetype as usize);
 		let component = archetype.get_component::<T>(instance.slot as usize)?;
 		unsafe { Some(&*(component as *const T)) }
@@ -161,9 +178,7 @@ impl EntityRegistry {
 
 	/// Gets a mutable reference to a [component](Component) bound to a specific [entity](Entity).
 	pub fn get_component_mut<T: Component>(&mut self, entity: &Entity) -> Option<&mut T> {
-		let instance = &self.instances[entity.index as usize];
-		assert_entity(entity, instance);
-
+		let instance = entity.get_instance(self.id);
 		let archetype = self.archetype_store.get_mut(instance.archetype as usize);
 		let component = archetype.get_component_mut::<T>(instance.slot as usize)?;
 		unsafe { Some(&mut *(component as *mut T)) }
@@ -216,22 +231,35 @@ impl EntityRegistry {
 		}
 	}
 
-	fn reserve_entity_space(&mut self, size: usize) {
-		self.allocator.reserve(size);
-		self.bitfield.reserve(size);
-		self.instances.extend(repeat_with(Default::default).take(size));
+	fn new_instance_buffer(&mut self, size: usize) -> &mut [EntityInstance] {
+		unsafe {
+			let ptr = std::alloc::alloc(Layout::array::<EntityInstance>(size).unwrap()) as *mut EntityInstance;
+			let buffer = std::slice::from_raw_parts_mut(ptr, size);
+			let instances = Box::from_raw(buffer);
+
+			self.capacity += size;
+			self.bitfield.reserve(size);
+			self.instance_buffers.push(instances);
+			buffer.fill_with(EntityInstance::default);
+
+			for i in 0..size {
+				self.available_instances.push(ptr.add(i));
+			}
+
+			buffer
+		}
 	}
 
 	#[inline(never)]
 	fn apply_archetype_transition(
 		&mut self, entity: &Entity, component: ComponentType, kind: ArchetypeTransitionKind,
 	) -> Option<((Archetype, usize), (Archetype, usize))> {
-		let instance = &mut self.instances[entity.index as usize];
-		assert_entity(entity, instance);
+		let mut entity = entity.clone();
+		let instance = entity.get_instance_mut(self.id);
 
 		let transition = self.archetype_store.get_archetype_transition(ArchetypeTransition {
 			archetype: Archetype {
-				index: instance.archetype as usize,
+				index: instance.archetype,
 			},
 			component,
 			kind,
@@ -243,14 +271,14 @@ impl EntityRegistry {
 		};
 
 		let src_slot = instance.slot as usize;
-		instance.archetype = dst.id().index as u16;
+		instance.archetype = dst.id().index;
 
 		let dst_slot = {
 			let mut slots = self.range_vec_pool.take_one();
 			dst.take_slots_no_init(1, &mut slots);
 
 			let slot = slots[0].start;
-			instance.slot = slot as u32;
+			instance.slot = slot;
 			slot
 		};
 
@@ -282,6 +310,9 @@ where
 {
 	/// Iterate all matching entities with the provided function.
 	fn for_each(self, func: impl FnMut(<(I, E) as ComponentQuery>::Arguments));
+
+	/// Iterate all matching entities with the provided function.
+	fn entities_for_each(self, func: impl FnMut(Entity, <(I, E) as ComponentQuery>::Arguments));
 }
 
 /// It allows for parallel iteration over a set of matching [entities](Entity) in an [EntityFilter].
@@ -291,6 +322,9 @@ where
 {
 	/// Iterate all matching entities in parallel with the provided function.
 	fn par_for_each(self, func: (impl Fn(<(I, E) as ComponentQuery>::Arguments) + Send + Sync));
+
+	/// Iterate all matching entities in parallel with the provided function.
+	fn par_entities_for_each(self, func: (impl Fn(Entity, <(I, E) as ComponentQuery>::Arguments) + Send + Sync));
 }
 
 impl<'l, I: 'static + ComponentSet, E: 'static + ComponentSet> EntityFilter<'l, I, E> {
@@ -324,7 +358,14 @@ where
 	fn for_each(self, mut func: impl FnMut(<(I, E) as ComponentQuery>::Arguments)) {
 		let query = <(I, E)>::get_query();
 		for archetype in self.entity_store.archetype_store.query(query) {
-			IterArchetype::for_each_mut(archetype, &mut func);
+			IterArchetype::for_each(archetype, &mut func);
+		}
+	}
+
+	fn entities_for_each(self, mut func: impl FnMut(Entity, <(I, E) as ComponentQuery>::Arguments)) {
+		let query = <(I, E)>::get_query();
+		for archetype in self.entity_store.archetype_store.query(query) {
+			IterArchetype::entities_for_each(archetype, &mut func);
 		}
 	}
 }
@@ -339,6 +380,15 @@ where
 		self.entity_store
 			.archetype_store
 			.query(query)
-			.for_each(|archetype| IterArchetypeParallel::for_each_mut(archetype, &func));
+			.for_each(|archetype| IterArchetypeParallel::for_each(archetype, &func));
+	}
+
+	fn par_entities_for_each(self, func: (impl Fn(Entity, <(I, E) as ComponentQuery>::Arguments) + Send + Sync)) {
+		let query = <(I, E)>::get_query();
+
+		self.entity_store
+			.archetype_store
+			.query(query)
+			.for_each(|archetype| IterArchetypeParallel::entities_for_each(archetype, &func));
 	}
 }
